@@ -1,0 +1,193 @@
+---
+title: "GPP Analyses"
+author: "JMH"
+date: "9 Jan 2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo= FALSE}
+library(tidyverse)
+library(here)
+library(mgcViz)
+library(MuMIn)
+library(mgcv)
+library(forecast)
+library(gridExtra)
+```
+
+# Load & munge data
+```{r}
+load(file.path(here::here("04_SavedImages"), "03d_GPPanalyses_AMB_rdat"))
+```
+
+
+DOY < 183 already removed
+```{r message=FALSE, warning=FALSE}
+met <- readr::read_csv(file = file.path(here::here("01_Data"),"01_MundgedMetabDat.csv")) %>% 
+  mutate(stream = fct_relevel(stream, c("st11U", "st18", "st9", "st6")),
+         treatment = fct_relevel(treatment, c("ambient", "nitrogen", "phosphorus")),
+         Yf = as.factor(Yf),
+         streamTreat = as.factor(streamTreat)) %>% 
+  filter(treatment == "ambient") %>% 
+  droplevels()
+```
+
+# GPP Plots
+Big differences among treatments. Pretty normal
+```{r echo=FALSE}
+ggplot(met, aes(y = lGPP, x = doy, color = treatment)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(vars(stream))
+```
+
+```{r echo=FALSE}
+ggplot(met, aes(sample = lGPP, color = stream)) +stat_qq() + stat_qq_line() +
+  facet_grid(.~stream)
+```
+
+# GAMMS
+
+
+```{r echo= FALSE}
+BestGPPCor <- corARMA(p = 1,q = 1, form = ~ doy | streamTreat)
+```
+
+
+
+## Model selection
+
+Removed DOYres because of concurvity
+```{r echo=FALSE, include = FALSE}
+# g.modsel_t <- uGamm(lGPP ~ invKT.C.StMean  + s(LightPerDay.lcg),
+#                 correlation = BestGPPCor, REML = FALSE, data = met,
+#                 control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000), class = "gamm")
+# 
+# g.modsel_s <- uGamm(lGPP ~ stream  + s(LightPerDay.lcg),
+#                 correlation = BestGPPCor, REML = FALSE, data = met,
+#                 control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000), class = "gamm")
+# 
+# 
+# g.Dredge_t <-  dredge(global.model = g.modsel_t, evaluate = TRUE, rank = AICc)
+# g.Dredge_s <-  dredge(global.model = g.modsel_s, evaluate = TRUE, rank = AICc)
+
+```
+
+
+```{r echo=FALSE}
+g.DredgeSumF <- merge(g.Dredge_t, g.Dredge_s)
+```
+
+
+Model selection for all models
+```{r echo=FALSE}
+subset(g.DredgeSumF, delta <= 2)
+```
+
+```{r}
+write_csv(g.DredgeSumF,
+          file.path(here::here("06_AICtables"), "03d_GPP_AMB.csv"))
+```
+
+
+```{r}
+g.gpp.BEST <- gamm(lGPP ~  invKT.C.StMean + s(LightPerDay.lcg),
+                correlation = BestGPPCor, REML = TRUE, data = met,
+                control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000))
+```
+
+```{r}
+g.gpp.BEST_s <- gamm(lGPP ~  stream + s(LightPerDay.lcg),
+                correlation = BestGPPCor, REML = TRUE, data = met,
+                control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000))
+```
+
+
+### Best models
+#### Overall
+
+
+```{r}
+summary(g.gpp.BEST$gam)
+```
+
+```{r}
+plot(g.gpp.BEST$gam)
+```
+
+
+Not bad
+```{r}
+round(concurvity(g.gpp.BEST$gam, full = FALSE)$estimate,3)
+```
+
+```{r}
+g.gpp.BEST.gv <- getViz(g.gpp.BEST$gam)
+check(g.gpp.BEST.gv)
+```
+
+
+
+One last check on the autocorrelation. Just foucsing on 3. Some remaining in S9A, S9P, S11UA, S18N
+
+```{r echo= FALSE, include = FALSE}
+g.gpp.best.acf <- met %>%
+  mutate(g.gppRes = resid(g.gpp.BEST$lme, type = "normalized")) %>%
+  select(streamTreat, g.gppRes) %>%
+  group_by(streamTreat) %>%
+  nest() %>%
+  mutate(acf = map(.x = data, .f = function(d) ggAcf(d$g.gppRes) + labs(title = streamTreat)))
+```
+
+```{r echo= FALSE}
+grid.arrange(grobs = g.gpp.best.acf$acf, ncol = 3)
+```
+
+
+```{r echo=FALSE}
+metBestTest <- met %>% 
+  mutate(gppres1 = residuals(g.gpp.BEST$gam, type = "response"),
+         gppPred1 = predict(g.gpp.BEST$gam, type = "response"))
+```
+
+
+ Check residuals
+Still some signal with doy. 
+```{r echo=FALSE}
+ggplot(metBestTest, aes(y = gppres1, x = DOYres, color = stream, shape = treatment)) +
+  geom_point() +
+  facet_grid(stream ~ treatment) 
+```
+
+```{r echo=FALSE}
+ggplot(metBestTest, aes(y = lGPP, x = gppPred1, color = stream, shape = treatment)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1)
+```
+
+
+```{r}
+summary(g.gpp.BEST_s$gam)
+```
+
+
+
+
+### save results
+```{r echo = FALSE, include = FALSE}
+ # saveRDS(g.gpp.BEST,
+ #         file = file.path(here::here("05_SavedModels"), "03d_GPP_AMB_Best.rds"))
+
+```
+
+
+```{r}
+# save.image(file.path(here::here("04_SavedImages"), "03d_GPPanalyses_AMB_rdat"))
+```
+

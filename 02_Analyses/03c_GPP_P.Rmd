@@ -1,0 +1,238 @@
+---
+title: "GPP Analyses"
+author: "JMH"
+date: "11/19/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo= FALSE}
+library(tidyverse)
+library(here)
+library(mgcViz)
+library(MuMIn)
+library(mgcv)
+library(forecast)
+library(gridExtra)
+```
+
+# Load & munge data
+```{r}
+load(file.path(here::here("04_SavedImages"), "03b_GPPanalysesPonly_rdat"))
+```
+
+
+DOY < 183 already removed
+```{r message=FALSE, warning=FALSE}
+met <- readr::read_csv(file = file.path(here::here("01_Data"),"01_MundgedMetabDat.csv")) %>% 
+  mutate(stream = fct_relevel(stream, c("st11U", "st18", "st9", "st6")),
+         treatment = fct_relevel(treatment, c("ambient", "nitrogen", "phosphorus")),
+         Yf = as.factor(Yf),
+         streamTreat = as.factor(streamTreat)) %>% 
+  filter(treatment == "ambient" | treatment == "phosphorus") %>% 
+  droplevels()
+```
+
+# GPP Plots
+Big differences among treatments. Pretty normal
+```{r echo=FALSE}
+ggplot(met, aes(y = lGPP, x = doy, color = treatment)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(vars(stream))
+```
+
+```{r echo=FALSE}
+ggplot(met, aes(sample = lGPP, color = stream)) +stat_qq() + stat_qq_line() +
+  facet_grid(.~stream)
+```
+
+# GAMMS
+
+
+```{r echo= FALSE}
+BestGPPCor <- corARMA(p = 1,q = 1, form = ~ doy | streamTreat)
+```
+
+
+
+## Model selection
+```{r echo=FALSE, include = T}
+# g.modsel_t <- uGamm(lGPP ~ treatment * invKT.C.StMean  + s(LightPerDay.lcg),
+#                 correlation = BestGPPCor, REML = FALSE, data = met,
+#                 control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000), class = "gamm")
+# 
+# g.modsel_s <- uGamm(lGPP ~ treatment * stream  + s(LightPerDay.lcg),
+#                 correlation = BestGPPCor, REML = FALSE, data = met,
+#                 control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000), class = "gamm")
+# 
+# 
+# g.Dredge_t <-  dredge(global.model = g.modsel_t, evaluate = TRUE, rank = AICc)
+# g.Dredge_s <-  dredge(global.model = g.modsel_s, evaluate = TRUE, rank = AICc)
+```
+
+
+```{r echo=FALSE}
+g.DredgeSumF <- merge(g.Dredge_t, g.Dredge_s)
+```
+
+
+Model selection for all models
+
+Note: models with stream and trt and with trt alone and with Tstream alone, and with Tstream and trt are all equally identical
+```{r echo=FALSE}
+subset(g.DredgeSumF, delta <= 2)
+```
+
+```{r}
+write_csv(g.DredgeSumF,
+          file.path(here::here("06_AICtables"), "03a_GPP_P.csv"))
+```
+
+```{r}
+g.gpp.BEST <- gamm(lGPP ~  stream + treatment + s(LightPerDay.lcg),
+                correlation = BestGPPCor, REML = TRUE, data = met,
+                control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000))
+```
+
+
+```{r}
+subset(g.Dredge_t, delta <= 2)
+```
+
+
+This is identical to all other models so including trt here just because it is part of our design
+```{r}
+g.gpp.BEST_t <- gamm(lGPP ~  invKT.C.StMean + treatment + s(LightPerDay.lcg),
+                correlation = BestGPPCor, REML = TRUE, data = met,
+                control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000))
+```
+
+### Best models
+#### Overall
+
+
+```{r}
+summary(g.gpp.BEST$gam)
+```
+
+
+```{r}
+plot(g.gpp.BEST$gam, pages = 1)
+```
+
+Not bad
+```{r}
+round(concurvity(g.gpp.BEST$gam, full = FALSE)$estimate,2)
+```
+
+```{r}
+g.gpp.BEST.gv <- getViz(g.gpp.BEST$gam)
+check(g.gpp.BEST.gv)
+```
+
+One last check on the autocorrelation. Just foucsing on 3. Some remaining in S6P, S9A, S9P, S11UA
+
+```{r echo= FALSE, include = FALSE}
+g.gpp.best.acf <- met %>%
+  mutate(g.gppRes = resid(g.gpp.BEST$lme, type = "normalized")) %>%
+  select(streamTreat, g.gppRes) %>%
+  group_by(streamTreat) %>%
+  nest() %>%
+  mutate(acf = map(.x = data, .f = function(d) ggAcf(d$g.gppRes) + labs(title = streamTreat)))
+```
+
+```{r echo= FALSE}
+grid.arrange(grobs = g.gpp.best.acf$acf, ncol = 3)
+```
+
+
+
+```{r echo=FALSE}
+metBestTest <- met %>% 
+  mutate(gppres1 = residuals(g.gpp.BEST$gam, type = "response"),
+         gppPred1 = predict(g.gpp.BEST$gam, type = "response"),
+         gppres2 = residuals(g.gpp.BEST_t$gam, type = "response"),
+         gppPred2 = predict(g.gpp.BEST_t$gam, type = "response"))
+```
+
+
+ Check residuals
+Still some signal with doy. Also early dates with S18-P giving problems
+Not much of a difference between 1 and 2.
+```{r echo=FALSE}
+ggplot(metBestTest, aes(y = gppres1, x = doy, color = stream, shape = treatment)) +
+  geom_point() +
+  facet_grid(stream ~ treatment) 
+```
+
+```{r echo=FALSE}
+ggplot(metBestTest, aes(y = lGPP, x = gppPred1, color = stream, shape = treatment)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1)
+```
+
+
+#### stream temp
+P is not sig
+
+```{r}
+summary(g.gpp.BEST_t$gam)
+```
+
+looks pretty good
+```{r}
+round(concurvity(g.gpp.BEST_t$gam, full = FALSE)$estimate,3)
+```
+
+```{r}
+g.gpp.BEST_t.gv <- getViz(g.gpp.BEST_t$gam)
+check(g.gpp.BEST_t.gv)
+```
+
+Still some autocorrelation remaining in S6P, S9P, 
+```{r echo= FALSE}
+g.gpp.BEST_t.acf <- met %>% 
+  mutate(g.gppRes = resid(g.gpp.BEST_t$lme, type = "normalized")) %>% 
+  select(streamTreat, g.gppRes) %>% 
+  group_by(streamTreat) %>% 
+  nest() %>% 
+  mutate(acf = map(.x = data, .f = function(d) ggAcf(d$g.gppRes) + labs(title = streamTreat)))
+```
+
+```{r echo= FALSE}
+grid.arrange(grobs = g.gpp.BEST_t.acf$acf, ncol = 3)
+```
+
+```{r echo=FALSE}
+ggplot(metBestTest, aes(y = gppres2, x = doy, color = stream, shape = treatment)) +
+  geom_point() +
+  facet_grid(stream ~ treatment) 
+```
+
+
+```{r echo=FALSE}
+ggplot(metBestTest, aes(y = lGPP, x = gppPred2, color = stream, shape = treatment)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1)
+```
+
+
+### save results
+```{r echo = FALSE, include = FALSE}
+ # saveRDS(g.gpp.BEST,
+ #         file = file.path(here::here("05_SavedModels"), "03a_GPP_P_Best.rds"))
+ # saveRDS(g.gpp.BEST_t,
+ #         file = file.path(here::here("05_SavedModels"), "03a_GPP_P_BestTemp.rds"))
+```
+
+
+```{r}
+# save.image(file.path(here::here("04_SavedImages"), "03b_GPPanalysesPonly_rdat"))
+```
+

@@ -1,0 +1,184 @@
+---
+title: "ER Analyses"
+author: "JMH"
+date: "6 June 2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo= FALSE}
+library(tidyverse)
+library(here)
+library(mgcViz)
+library(MuMIn)
+library(mgcv)
+library(forecast)
+library(gridExtra)
+library(tidymv)
+library(ggpubr)
+```
+
+# Load & munge data
+```{r}
+load(file.path(here::here("04_SavedImages"), "02_ERanalysesNonly_rdat"))
+```
+
+
+```{r message=FALSE, warning=FALSE}
+met <- readr::read_csv(file = file.path(here::here("01_Data"),"01_MundgedMetabDat.csv")) %>% 
+  mutate(stream = fct_relevel(stream, c("st11U", "st18", "st9", "st6")),
+         treatment = fct_relevel(treatment, c("ambient", "nitrogen", "phosphorus")),
+         Yf = as.factor(Yf),
+         streamTreat = as.factor(streamTreat)) %>% 
+  filter(treatment == "ambient" | treatment == "nitrogen") %>% 
+  droplevels()
+```
+
+
+
+# ER Plots
+Big differences among treatments. Normalish
+```{r echo=FALSE}
+ggplot(met, aes(y = lER, x = doy, color = treatment)) +
+  geom_point()+
+  stat_smooth() +
+  facet_wrap(vars(stream))
+```
+
+
+```{r echo=FALSE}
+ggplot(met, aes(sample = lER, color = stream)) +stat_qq() + stat_qq_line() +
+  facet_grid(.~stream)
+```
+
+
+
+
+
+```{r echo= FALSE}
+BestERCor <- corARMA(p = 1,q = 1, form = ~ doy | streamTreat)
+```
+
+
+## Model sel
+
+
+```{r echo=FALSE, include = T}
+# g.er.modsel_t <- uGamm(lER ~ treatment * invKT.C.StMean  + s(LightPerDay.lcg),
+#                 correlation = BestERCor, REML = FALSE, data = met,
+#                 control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000), class = "gamm")
+# 
+# g.er.modsel_s <- uGamm(lER ~ treatment * stream  + s(LightPerDay.lcg),
+#                 correlation = BestERCor, REML = FALSE, data = met,
+#                 control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000), class = "gamm")
+# 
+# 
+# g.er.Dredge_t <-  dredge(global.model = g.er.modsel_t, evaluate = TRUE, rank = AICc)
+# g.er.Dredge_s <-  dredge(global.model = g.er.modsel_s, evaluate = TRUE, rank = AICc)
+```
+
+
+```{r echo=FALSE}
+g.erDredgeSumF <- merge(g.er.Dredge_t, g.er.Dredge_s)
+```
+
+Model selection for all models. Best model includes stream temp so don't need to worry about that.
+```{r echo=FALSE}
+subset(g.erDredgeSumF, delta <= 2)
+```
+
+
+```{r}
+write_csv(g.erDredgeSumF,
+          file.path(here::here("06_AICtables"), "02a_ER_N.csv"))
+```
+
+```{r}
+g.er.BEST <- gamm(lER ~ treatment + invKT.C.StMean + s(LightPerDay.lcg),
+                correlation = BestERCor, REML = TRUE, data = met,
+                control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000))
+```
+
+```{r}
+g.er.BEST_s <- gamm(lER ~ treatment + stream + s(LightPerDay.lcg),
+                correlation = BestERCor, REML = TRUE, data = met,
+                control = lmeControl(maxIter = 1e8, msMaxIter = 1e8, niterEM = 1000))
+```
+
+
+### Best models
+#### Overall
+ 
+```{r}
+summary(g.er.BEST$gam)
+```
+
+```{r}
+plot(g.er.BEST$gam, pages = 1)
+```
+
+
+Looking good
+```{r}
+g.er.BEST.gv <- getViz(g.er.BEST$gam)
+check(g.er.BEST.gv)
+```
+
+
+One last check on the autocorrelation. Some remaining in S6N, S9N, and S18A
+```{r echo= FALSE}
+g.er.best.acf <- met %>% 
+  mutate(g.erRes = resid(g.er.BEST$lme, type = "normalized")) %>% 
+  select(streamTreat, g.erRes) %>% 
+  group_by(streamTreat) %>% 
+  nest() %>% 
+  mutate(acf = map(.x = data, .f = function(d) ggAcf(d$g.erRes) + labs(title = streamTreat)))
+```
+
+```{r echo= FALSE}
+grid.arrange(grobs = g.er.best.acf$acf, ncol = 3)
+```
+
+
+```{r echo=FALSE}
+metBestTest <- met %>% 
+  mutate(erres1 = residuals(g.er.BEST$gam, type = "response"),
+         erPred1 = predict(g.er.BEST$gam, type = "response"))
+```
+
+
+ Check residuals
+Still some signal with doy. 
+```{r echo=FALSE}
+ggplot(metBestTest, aes(y = erres1, x = doy, color = stream, shape = treatment)) +
+  geom_point() +
+  facet_grid(stream ~ treatment) 
+```
+
+```{r echo=FALSE}
+ggplot(metBestTest, aes(y = lER, x = erPred1, color = stream, shape = treatment)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1)
+```
+
+
+```{r}
+summary(g.er.BEST_s$gam)
+```
+
+
+### save results
+```{r echo = FALSE, include = FALSE}
+ # saveRDS(g.er.BEST,
+ # file = file.path(here::here("05_SavedModels"), "02b_ER_N_Best.rds"))
+```
+
+
+```{r}
+# save.image(file.path(here::here("04_SavedImages"), "02_ERanalysesNonly_rdat"))
+```

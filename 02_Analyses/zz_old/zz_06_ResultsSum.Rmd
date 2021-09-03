@@ -1,0 +1,254 @@
+---
+title: "Results summary"
+author: "JMH"
+date: "24 Jan 2021"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+editor_options: 
+  chunk_output_type: console
+---
+
+
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(gamm4)
+library(mgcViz)
+library(MuMIn)
+library(forecast)
+library(gridExtra)
+library(tidymv)
+library(ggpubr)
+library(grid)
+```
+
+```{r}
+load(file.path(here::here("04_SavedImages"), "05_Figures_Rdat"))
+```
+
+# Last para of Intro
+
+# Data analysis
+
+-   To understand how temperature and nutrient enrichment influences ecosystem metabolism, we used a information theoretic approach to select the best generalized additive mixed model (GAMM) describing the response of GPP, ER, and NEP to temperature, nutrient enrichment, as well as other important covariates such as discharge, seasonality, and light.
+
+-   We used two measures of temperature: daily mean stream temperature and annual mean stream temperature.
+
+    -   Daily mean stream temperature reflects the direct effects of temperature on metabolism as well aspects of seasonality associated with shifts in the composition and biomass of autotrophic and heterotrophic communities. Daily mean stream temperature was expressed as 1/kT and centered on the mean annual temperature of each stream (for the three years of these experiments).
+    -   Annual mean stream temperature, in streams which have been acclimated to these temperatures for decades, reflects the cummulative impact of thermal regimes on community structure, biomass, and metabolic rates. Annual mean stream temperature was expressed as 1/kT and centered on the mean temperature across all streams and years (which was something like 14.9°C)
+
+-   We also accounted for other potential drivers of metabolism including discharge, seasonality, and light.
+
+    -   Light, which was measured as lux with a HOBO pendant, was centered on the global mean daily integrated light (because we expected and observed no change in mean light levels among streams).
+    -   Discharge, day of year (our measure of seasonality), and daily mean stream temperature were strongly correlated (**stats**). Because daily mean stream temperature was considered *a priori* as a primary driver of metabolism, we used linear regression to extract the residual variation in discharge and day of year not associated with stream temperature and used those residuals in our regression. Discharge was centered on mean annual stream discharge prior to linear regressions.
+
+-   We included an autogregressive-moving-average (ARMA) model to characterize temporal autocorrelation. ARMA model terms were selected by using AIC to rank models with different p's and q's. In a few cases, we selected an ARMA model which had a slightly higher AIC value but was simpler than the most-likely model.
+
+-   Finally to meet model assumptions of normality, we log transformed GPP and -ER. NEP did not require a transformation to meet normality assumptions.
+
+-   For each aspect of metabolism, our global GAMM model contained fixed effects for daily mean stream temperature and annual mean stream temperature as well as splines for discharge and day of year, grouped by stream (i.e., a different spline for each stream), as well as a single spline for light in GPP and NEP models.
+
+-   Initial analyses of our data indicated that in some cases stream as a categorical factor was a better predictor of differences among streams than mean annual stream temperature. So, we ultimately included two sets of global models one containing mean annual stream temperature and the other with stream as a categorical variable.
+
+-   We used AIC to select among models and following Burnham and Anderson (2002). We considered models with a $\Delta$AIC \<2 as having substantial empirical support and models with a $\Delta$AIC between 4 and 7 as having considerably less support. **NOTE: this applies to nested models, whereas, we have two global models we are comparing.**
+
+-   When mean annual stream temperature and stream identity models both had delta AIC \< 4 we report the model containing the temperature term since our *a priori* expectations for nutrient by temperature interactions focused on stream temperature and not stream identity.
+
+-   GAMM models were fit with the function *"gamm"* in the *"mgcv"* package in R.
+
+# Results
+
+## Ambient
+
+### GPP
+
+```{r echo=FALSE, fig.height=4, fig.width=8}
+ggarrange(F1.GPP_AMB_B, F1.GPP_AMB_T, nrow = 1, ncol = 2)
+```
+
+**Figure 1**. *Response surfaces illustrating the effect of stream and daily temperature (LEFT) or annual and daily temperature (RIGHT) on log GPP during the ambient year. The model containing stream was considerably more likely than the model containing annual temperature. In both models, discharge, day of year, and light was set to the grand median across all streams.*  **Setting Q to the grand mean across streams makes sense because we are talking about Q residuals, not raw Q**
+
+
+  <br>
+    
+
+-   The most likely model for log GPP during the ambient year contained an interaction between stream and daily temperature as well as splines for seasonality and light and splines for discharge in each stream ($R^2$ = 0.92).
+-   After accounting for discharge, light, and seasonality, GPP generally increased with daily temperature. The increase in GPP with daily temperature was weakest in S6.
+-   The highest ranked model containing mean annual stream temperature was considerably less likely ($\Delta$AIC = 19.6). However, this model also preformed very well in terms of $R^2$ (0.70) and meeting model assumptions. This model indicated that mean annual and daily temperature had positive interacting effects on GPP.
+
+
+  <br>
+    
+
+### ER
+
+```{r echo=FALSE, fig.height=4, fig.width=4}
+F1.ER_AMB_T
+```
+
+**Figure 2**. *Response surface illustrating the effect of annual and daily stream temperature on log ER. Discharge and day of year were set to the grand mean across streams.*
+
+
+  <br>
+    
+
+-   The most likely model for log ER during the ambient year contained an interaction between daily and mean annual stream temperature (P \< 0.001), a spline for seasonality, and splines describing the effect of discharge for each stream ($R^2$ = 0.78).
+-   After accounting for seasonality and discharge, our GAMM model indicates that ER increased with mean daily and annual temperature, peaking on the warmest days in the hottest streams.
+
+
+  <br>
+    
+
+### NEP
+
+```{r echo=FALSE, fig.height=4, fig.width=8}
+ggarrange(F1.NEP_AMB_B, F1.NEP_AMB_T, nrow = 1, ncol = 2)
+```
+
+**Figure 3**. *Response surfaces illustrating the effect of stream identity and daily temperature (LEFT) or annual and daily temperature (RIGHT) on NEP during the ambient year. The model containing stream was considerably more likely than the model containing annual temperature. In both models, discharge, day of year, and light were set to the grand median across all streams.*
+
+
+  <br>
+
+-   The most likely model for NEP during the ambient year contained stream identity and mean daily temperature (*No interaction*) as well as splines for light and discharge as well as splines for seasonality in each stream ($R^2$ = 0.7).
+-   This model indicated that NEP *decreased* with daily temperature. After accounting for other variables, NEP was much higher in S6 than the other streams (based on model table, not figure so has nothing to do with how I standardize Q for ploting).
+-   The highest ranked model containing mean annual stream temperature was less likely, but still highly ranked ($\Delta$AIC = 6) and performed very well ($R^2$ = 0.527). This model contained a term for mean annual and daily stream temperature (*with no interaction*) and splines for light and discharge as well as a spline for seasonality for each stream. NEP decreased with mean daily temperature and increased with mean annual temperature, indicating that while the warmest streams were generally the most autotrophic they tended to be more heterotrophic on warm days.
+
+
+  <br>
+    
+
+## N enrichment
+
+### GPP
+
+```{r echo=FALSE, fig.height=8, fig.width=9}
+ggarrange(F0_GPP_N, F1.GPP_N_T, F2.GPP_N_T, nrow = 2, ncol = 2)
+```
+
+**Figure 4** *Raw log GPP data (TOP LEFT) as well as response surfaces illustrating the effect of annual and daily temperature (TOP RIGHT) on log GPP during the ambient and N enrichment years as well as the modeled effect size of N enrichment (BOTTOM LEFT). Here, I'm showing the results of the "best" model with stream temperature which had a $\Delta$AIC of 3.7.*
+
+
+  <br>
+    
+
+-   The most likely model of how N enrichment influenced GPP contained a three-way interaction among treatment, *stream*, and daily temperature as well as splines for seasonality and light and splines for discharge in each stream ($R^2$ = 0.72)
+-   The most likely model containing annual temperature had a $\Delta$AIC of 3.7 and was thus considered a "pretty likely" (*not the words Burnham and Anderson would use*) model. This model contained a three-way interaction among treatment, annual temperature, and daily temperature as well as splines for seasonality and light, as well as splines for discharge in each stream ($R^2$ = 0.63) **I'm showing/interpreting this model because it is highly likely, fits our a priori expectations, and is consistant across the N enrichment responses.**
+-   GPP increased with daily and annual temperature and was higher in warm streams on warm days (annual temp x daily temp).
+-   GPP was higher during N enrichment and was especially higher on warm days (N x daily temp, P = 0.01) in cold streams (N x stream temp, P = 0.48); however, the effect of N enrichment on GPP was highest in cold streams on warm days.
+
+
+   <br>
+    
+
+### ER
+
+```{r echo=FALSE, fig.height=8, fig.width=9}
+ggarrange(F0_ER_N, F1.ER_N_T, F2.ER_N_T, nrow = 2, ncol = 2)
+```
+
+**Figure 5**. *Raw log ER data (TOP LEFT) as well as response surfaces illustrating the effect of annual and daily temperature (TOP RIGHT) on log ER during the ambient and N enrichment years as well as the modeled effect size of N enrichment (BOTTOM LEFT).*
+
+
+   <br>
+    
+
+-   The most likely model of how N enrichment influenced log ER contained a three-way interaction among treatment, annual temperature, and daily temperature as well a spline for seasonality and splines for discharge in each stream ($R^2$ = 0.92)
+-   This model indicated that ER increased with daily and annual temperature and was higher under N enrichment.
+-   There was a negative interaction coefficient between daily and annual temperature indicating that the increase in ER with daily temperature was greater in warmer streams (*pretty sure I'm right about this, but don't see in figures*).
+-   While an N x daily temperature and N x annual temperatures where included in this model they were not significant, although the 3-way interaction was significant. In general, the impact of N enrichment was greatest at cold temperatures (positive coefficient effecting inverse temperature).
+
+
+
+   <br>
+    
+
+### NEP
+
+```{r echo=FALSE, fig.height=8, fig.width=9}
+ggarrange(F0_NEP_N, F1.NEP_N_T, F2.NEP_N_T, nrow = 2, ncol = 2)
+```
+
+**Figure 6**. *Raw NEP data (TOP LEFT) as well as response surfaces illustrating the effect of annual and daily temperature (TOP RIGHT) on NEP during the ambient and N enrichment years as well as the modeled effect size of N enrichment (BOTTOM LEFT).*
+
+
+  <br>
+    
+
+-   The most likely model of the effect of N enrichment on NEP contained a three-way interaction among treatment, annual temperature, and daily temperature as well as a spline for light and splines for seasonality in each stream ($R^2$ = 0.76)
+-   This model indicated that NEP increased with daily temperature, particularly in cold streams (daily x annual temp, P = 0.50), while NEP decreased with annual temperature.
+-   N enrichment decreased NEP (i.e., made the stream more heterotrophic) especially on cold days (daily temp x N; P = 0.003) in warm streams (annual temp x N; P = 0.017).
+
+
+  <br>
+    
+
+## P enrichment
+
+### GPP
+
+```{r echo=FALSE, fig.height=8, fig.width=9}
+ggarrange(F0_GPP_P, F1.GPP_P_B, F2.GPP_P_glob, nrow = 2, ncol = 2)
+```
+
+**Figure 7**.  *Raw log GPP data (TOP LEFT) as well as response surfaces illustrating the effect of stream and daily temperature (TOP RIGHT) onlog  GPP during the ambient and P enrichment years as well as the modeled effect size of P enrichment (BOTTOM LEFT).*
+
+
+   <br>
+    
+
+-   The most likely model explaining the effect of P enrichment on log GPP included P x daily temperature and stream x daily temperature interactions as well as splines for light as well as splines for discharge and seasonality in each stream ($R^2$ = 0.91).
+-   The highest ranked model containing annual stream temperature had a $\Delta$AIC of 23 ($R^2$ = 0.73) -- No comparison to best model!
+-   Daily temperature increased GPP in S18, S9, and S11 while it decreased GPP in S6.
+-   The effect of P enrichment on GPP differed among streams: S9 \> S11 \> S6 \> S18 (based on effect size plot not on GAMM table).
+
+
+  <br>
+    
+
+### ER
+
+```{r echo=FALSE, fig.height=8, fig.width=9}
+ggarrange(F0_ER_P, F1.ER_P_B, F2.ER_P_glob, nrow = 2, ncol = 2)
+```
+
+   <br>
+    
+
+**Figure 8**.   *Raw log ER data (TOP LEFT) as well as response surfaces illustrating the effect of stream and daily temperature (TOP RIGHT) on log ER during the ambient and P enrichment years as well as the modeled effect size of P enrichment (BOTTOM LEFT).*
+
+  <br>
+    
+
+-   The most likely model explaining the effect of P on log ER included P x daily temperature and P x stream interactions as well as splines for discharge and seasonality for each stream ($R^2$ = 0.944).
+
+-   The highest ranked model containing annual stream temperature had a $\Delta$AIC of 31.2 ($R^2$ = 0.717) -- No comparison to the best model! (*But, it isn't a bad model.*)
+
+-   The effect of P enrichment on ER differed among streams: S9 & S11U \> S6 \> S18.
+
+-   The interactions in this model indicated that the influence of P enrichment on ER decreased with daily temperature. (P x daily temp; P = 0.02).\
+
+-   In general, ER increased with daily temp in S18 more than in other stream (S18 x daily temp; P \< 0.001).
+
+   <br>
+
+### NEP
+
+```{r echo=FALSE, fig.height=8, fig.width=9}
+ggarrange(F0_NEP_P, F1.NEP_P_B, F2.NEP_P_glob, nrow = 2, ncol = 2)
+```
+
+**Figure 9**.   *Raw NEP data (TOP LEFT) as well as response surfaces illustrating the effect of stream and daily temperature (TOP RIGHT) on NEP during the ambient and P enrichment years as well as the modeled effect size of NEP enrichment (BOTTOM LEFT).*
+
+   <br>
+
+-   the most likely model explaining the effects of P on NEP included P x daily temperature and P x stream interactions,a spline for discharge and light as well as splines for seasonality in each stream ($R^2$ = 0.88)
+-   The highest ranked model containing stream temperature had a $\Delta$AIC of 19.4 ($R^2$ = 0.42)
+-   P enrichment increased NEP in S18 (P x S18; P = \< 0.001) while it decreased NEP in S9 \> S6 \> S11 (\> indicate the magnitude of decrease in NEP).
+-   In S9, S18, and S11 NEP increased with daily temperature while NEP decreased with daily temperature in S6.
+-   The effect size plot is a bit weird because NEP gets wacky in a little area in S9 and S11U (***THIS REQUIRES A CLOSER LOOK***)
+

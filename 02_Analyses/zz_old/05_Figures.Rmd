@@ -1,0 +1,1095 @@
+---
+title: "Untitled"
+author: "JMH"
+date: "12/26/2020"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(gamm4)
+library(mgcViz)
+library(MuMIn)
+library(forecast)
+library(gridExtra)
+library(tidymv)
+library(ggpubr)
+library(grid)
+library(egg)
+library(here)
+```
+
+
+```{r}
+load(file.path(here::here("04_SavedImages"), "05_Figures_Rdat"))
+```
+
+
+# LOAD BEST MODELS
+```{r}
+ER_all.b <- readRDS(file = file.path(here::here("05_SavedModels"), "02a_ERall_Best.rds"))
+ER_all.t <- readRDS(file = file.path(here::here("05_SavedModels"), "02a_ERall_BestTemp.rds"))
+ER_N.b <- readRDS(file = file.path(here::here("05_SavedModels"), "02b_ER_N_Best.rds"))
+# ER_N.t <- readRDS(file = file.path(here::here("05_SavedModels"), "")) #Temp was best
+ER_P.b <- readRDS(file = file.path(here::here("05_SavedModels"), "02c_ER_P_Best.rds"))
+ER_P.t <- readRDS(file = file.path(here::here("05_SavedModels"), "02c_ER_P_BestTemp.rds"))
+ER_AMB.b <- readRDS(file = file.path(here::here("05_SavedModels"), "02d_ER_AMB_Best.rds")) # best had temp
+
+GPP_all.b <- readRDS(file = file.path(here::here("05_SavedModels"), "03a_GPPall_Best.rds"))
+GPP_all.t <- readRDS(file = file.path(here::here("05_SavedModels"), "03a_GPPall_BestTemp.rds"))
+GPP_N.b <- readRDS(file = file.path(here::here("05_SavedModels"), "03b_GPP_N_Best.rds"))
+GPP_N.t <- readRDS(file = file.path(here::here("05_SavedModels"), "03b_GPP_N_BestTemp.rds"))
+GPP_P.b <- readRDS(file = file.path(here::here("05_SavedModels"), "03c_GPP_P_Best.rds"))
+GPP_P.t <- readRDS(file = file.path(here::here("05_SavedModels"), "03c_GPP_P_BestTemp.rds"))
+GPP_AMB.b <- readRDS(file = file.path(here::here("05_SavedModels"), "03d_GPP_AMB_Best.rds"))
+GPP_AMB.t <- readRDS(file = file.path(here::here("05_SavedModels"), "03d_GPP_AMB_BestTemp.rds"))
+
+NEP_all.b <- readRDS(file = file.path(here::here("05_SavedModels"), "04a_NEP_all_Best.rds"))
+NEP_all.t <- readRDS(file = file.path(here::here("05_SavedModels"), "04a_NEP_all_BestTemp.rds"))
+NEP_N.b <- readRDS(file = file.path(here::here("05_SavedModels"), "04b_NEP_N_Best.rds"))
+# NEP_N.t <- readRDS(file = file.path(here::here("05_SavedModels"), "")) #Temp was best
+NEP_P.b <- readRDS(file = file.path(here::here("05_SavedModels"), "04c_NEP_P_Best.rds"))
+NEP_P.t <- readRDS(file = file.path(here::here("05_SavedModels"), "04c_NEP_P_BestTemp.rds"))
+NEP_AMB.b <- readRDS(file = file.path(here::here("05_SavedModels"), "04d_NEP_AMB_Best.rds")) 
+NEP_AMB.t <- readRDS(file = file.path(here::here("05_SavedModels"), "04d_NEP_AMB_BestTemp.rds")) 
+```
+
+# Load data 
+```{r message=FALSE, warning=FALSE}
+metAll <- readr::read_csv(file = file.path(here::here("01_Data"),"02_PostERmet.csv")) %>% 
+  mutate(stream = fct_relevel(stream, c("st11U", "st18", "st9", "st6")),
+         treatment = fct_relevel(treatment, c("ambient", "nitrogen", "phosphorus")),
+         Yf = as.factor(Yf),
+         streamTreat = as.factor(streamTreat))
+
+metN <- metAll %>% 
+  filter(treatment == "ambient" | treatment == "nitrogen") %>% 
+  droplevels()
+
+metP <- metAll %>% 
+  filter(treatment == "ambient" | treatment == "phosphorus") %>% 
+  droplevels()
+
+metAMB <- metAll %>% 
+  filter(treatment == "ambient") %>% 
+  droplevels()
+```
+
+```{r}
+blah <- readr::read_csv(file = file.path(here::here("01_Data"),"01_MundgedMetabDat.csv"))
+
+ggplot(blah, aes(y = lGPP, x = doy)) +
+  geom_point() +
+  facet_grid(stream ~ treatment) +
+  geom_vline(xintercept = 183, color = "red")
+```
+
+
+# Best models
+## Ambient
+### ER
+```{r}
+summary(ER_AMB.b$gam)
+```
+
+### GPP
+```{r}
+summary(GPP_AMB.b$gam)
+```
+
+
+### NEP
+```{r}
+summary(NEP_AMB.b$gam)
+```
+
+
+## Nitrogen
+### ER
+```{r}
+summary(ER_N.b$gam)
+```
+
+### GPP
+```{r}
+summary(GPP_N.t$gam)
+```
+
+### NEP
+```{r}
+summary(NEP_N.b$gam)
+```
+
+
+## Phosphorus
+### ER
+```{r}
+summary(ER_P.b$gam)
+```
+
+### GPP
+```{r}
+summary(GPP_P.b$gam)
+```
+
+### NEP
+```{r}
+summary(NEP_P.b$gam)
+```
+
+
+
+
+# Predict models
+
+## Stream
+```{r}
+QresSet = 0.006583  #grand median
+DOYSet = 8.1 #grand median
+LightSet = -0.04506 #grand median
+StreamSet = "st6"
+P.ER_all.b <- predict_gam(ER_all.b$gam, exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet))
+
+P.ER_P.b <- predict_gam(ER_P.b$gam, exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet))
+
+P.GPP_all.b <- predict_gam(GPP_all.b$gam, exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              LightPerDay.lcg = LightSet,
+                                              Qres = QresSet,
+                                              DOYres = DOYSet))
+
+P.GPP_N.b <- predict_gam(GPP_N.b$gam, exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet))
+
+P.GPP_P.b <- predict_gam(GPP_P.b$gam, exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet))
+
+P.GPP_AMB.b <- predict_gam(GPP_AMB.b$gam, exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet))
+
+P.NEP_all.b <- predict_gam(NEP_all.b$gam, exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet))
+
+P.NEP_P.b <- predict_gam(NEP_P.b$gam, exclude_terms = c(
+                                            "s(Qres)",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet))
+
+
+P.NEP_AMB.b <- predict_gam(NEP_AMB.b$gam, exclude_terms = c(
+                                            "s(Qres)",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet))
+```
+
+## Temp
+```{r}
+P.ER_all.t <- predict_gam(ER_all.t$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              stream = StreamSet))
+
+P.ER_N.b <- predict_gam(ER_N.b$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              stream = StreamSet))
+
+P.ER_P.t <- predict_gam(ER_P.t$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              stream = StreamSet))
+
+P.ER_AMB.b <- predict_gam(ER_AMB.b$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              stream = StreamSet))
+
+P.GPP_all.t <- predict_gam(GPP_all.t$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet,
+                                              stream = StreamSet))
+
+P.GPP_N.t <- predict_gam(GPP_N.t$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet,
+                                              stream = StreamSet))
+
+P.GPP_P.t <- predict_gam(GPP_P.t$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet,
+                                              stream = StreamSet))
+
+P.GPP_AMB.t <- predict_gam(GPP_AMB.t$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres)",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet,
+                                              stream = StreamSet))
+
+P.NEP_all.t <- predict_gam(NEP_all.t$gam,  exclude_terms = c(
+                                            "s(Qres):streamst11U",
+                                            "s(Qres):streamst18",
+                                            "s(Qres):streamst6",
+                                            "s(Qres):streamst9",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet,
+                                              stream = StreamSet))
+
+P.NEP_N.b <- predict_gam(NEP_N.b$gam,  exclude_terms = c(
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet,
+                                              stream = StreamSet))
+
+P.NEP_P.t <- predict_gam(NEP_P.t$gam,  exclude_terms = c(
+                                            "s(Qres)",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet,
+                                              stream = StreamSet))
+
+P.NEP_AMB.t <- predict_gam(NEP_AMB.t$gam,  exclude_terms = c(
+                                            "s(Qres)",
+                                            "s(DOYres):streamst11U",
+                                            "s(DOYres):streamst18",
+                                            "s(DOYres):streamst6",
+                                            "s(DOYres):streamst9",
+                                            "s(LightPerDay.lcg)"),
+                                            values  = list(
+                                              Qres = QresSet,
+                                              DOYres = DOYSet,
+                                              LightPerDay.lcg = LightSet,
+                                              stream = StreamSet))
+```
+
+
+# Raw data Figs
+```{r}
+F0_ER_N <- ggplot(metN, aes(y = lER, x = doy, color = treatment)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("steelblue","firebrick")) +
+  facet_grid(.~stream)
+
+F0_GPP_N <- ggplot(metN, aes(y = lGPP, x = doy, color = treatment)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("steelblue","firebrick")) +
+  facet_grid(.~stream)
+
+F0_NEP_N <- ggplot(metN, aes(y = NEP, x = doy, color = treatment)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("steelblue","firebrick")) +
+  facet_grid(.~stream)
+
+F0_ER_P <- ggplot(metP, aes(y = lER, x = doy, color = treatment)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("steelblue","firebrick")) +
+  facet_grid(.~stream)
+
+F0_GPP_P <- ggplot(metP, aes(y = lGPP, x = doy, color = treatment)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("steelblue","firebrick")) +
+  facet_grid(.~stream)
+
+F0_NEP_P <- ggplot(metP, aes(y = NEP, x = doy, color = treatment)) +
+  geom_point() +
+  geom_line() +
+  scale_color_manual(values = c("steelblue","firebrick")) +
+  facet_grid(.~stream)
+```
+
+
+# Response Figs
+
+## Temp models
+
+### Function
+has amb and trt in facets
+```{r}
+AnTvDoyTFigFun <- function(ModelPred, Response, RawDat){
+  AnTvDoyTFig <- ggplot() +
+    geom_raster(data = ModelPred, aes(y = -invKT.C.StMean, x = -Tanom.iktCs, fill = fit)) +
+    facet_wrap(vars(treatment)) +
+    # scale_fill_distiller(palette = "Spectral") +
+    geom_point(data = RawDat, aes_(y = substitute(-invKT.C.StMean), x = substitute(-Tanom.iktCs), size = substitute(Response)), 
+               position = position_jitter(width = 0.05, height = 0.025), shape = 21, fill = "transparent", alpha= 0.5) +
+    scale_size_binned(n.breaks = 4, nice.breaks = TRUE) +
+    ylab("Mean summer temp (-1 * centered 1/kT)") +
+    xlab("Mean daily temp (-1 * centered 1/kT)")
+  AnTvDoyTFig
+}
+```
+
+This is for a specific year alone with stream temp
+```{r}
+AnTvDoyTFigFunRespose <- function(ModelPred, Response, RawDat){
+  AnTvDoyTFig <- ggplot() +
+    geom_raster(data = ModelPred, aes(y = -invKT.C.StMean, x = -Tanom.iktCs, fill = fit)) +
+    # facet_wrap(vars(treatment)) +
+    # scale_fill_distiller(palette = "Spectral") +
+    geom_point(data = RawDat, aes_(y = substitute(-invKT.C.StMean), x = substitute(-Tanom.iktCs), size = substitute(Response)), 
+               position = position_jitter(width = 0.05, height = 0.025), shape = 21, fill = "transparent", alpha= 0.5) +
+    scale_size_binned(n.breaks = 4, nice.breaks = TRUE) +
+    ylab("Mean summer temp (-1 * centered 1/kT)") +
+    xlab("Mean daily temp (-1 * centered 1/kT)")
+  AnTvDoyTFig
+}
+```
+
+This is for a specific year alone with stream
+```{r}
+AnTvDoyTFigFunRespose_s <- function(ModelPred, Response, RawDat){
+  AnTvDoyTFig <- ggplot() +
+    geom_raster(data = ModelPred, aes(y = stream, x = -Tanom.iktCs, fill = fit)) +
+    # facet_wrap(vars(treatment)) +
+    scale_fill_distiller(palette = "Spectral") +
+    geom_point(data = RawDat, aes_(y = substitute(stream), x = substitute(-Tanom.iktCs), size = substitute(Response)), 
+               position = position_jitter(width = 0.05, height = 0.025), shape = 21, fill = "transparent", alpha= 0.5) +
+    scale_size_binned(n.breaks = 4, nice.breaks = TRUE) +
+    ylab("stream") +
+    xlab("Mean daily temp (-1 * centered 1/kT)")
+  AnTvDoyTFig
+}
+```
+
+
+### Figs
+```{r}
+F1.ER_all_T <- AnTvDoyTFigFun(ModelPred = P.ER_all.t, Response = lER, RawDat = metAll)
+F1.GPP_all_T <- AnTvDoyTFigFun(ModelPred = P.GPP_all.t, Response = lGPP, RawDat = metAll)
+F1.NEP_all_T <- AnTvDoyTFigFun(ModelPred = P.NEP_all.t, Response = NEP, RawDat = metAll)
+```
+
+```{r}
+F1.ER_N_T <- AnTvDoyTFigFun(ModelPred = P.ER_N.b, Response = lER, RawDat = metN)
+F1.GPP_N_T <- AnTvDoyTFigFun(ModelPred = P.GPP_N.t, Response = lGPP, RawDat = metN)
+F1.NEP_N_T <- AnTvDoyTFigFun(ModelPred = P.NEP_N.b, Response = NEP, RawDat = metN)
+```
+
+```{r}
+F1.ER_P_T <- AnTvDoyTFigFun(ModelPred = P.ER_P.t, Response = lER, RawDat = metP)
+F1.GPP_P_T <- AnTvDoyTFigFun(ModelPred = P.GPP_P.t, Response = lGPP, RawDat = metP)
+F1.NEP_P_T <- AnTvDoyTFigFun(ModelPred = P.NEP_P.t, Response = NEP, RawDat = metP)
+```
+
+```{r}
+F1.ER_AMB_T <- AnTvDoyTFigFun(ModelPred = P.ER_AMB.b, Response = lER, RawDat = metAMB)
+F1.GPP_AMB_T <- AnTvDoyTFigFun(ModelPred = P.GPP_AMB.t, Response = lGPP, RawDat = metAMB)
+F1.NEP_AMB_T <- AnTvDoyTFigFun(ModelPred = P.NEP_AMB.t, Response = NEP, RawDat = metAMB)
+```
+
+
+## Stream models
+
+### Function
+```{r}
+STRvDoyTFigFun <- function(ModelPred, Response, RawDat){
+  # ResponseN <- Response
+  # .e <- environment()
+  STRvDoyTFig <- ggplot() +
+    geom_raster(data = ModelPred, aes(y = stream, x = -Tanom.iktCs, fill = fit)) +
+    facet_wrap(vars(treatment)) +
+    scale_fill_distiller(palette = "Spectral") +
+    # https://ggplot2-book.org/programming.html
+    geom_point(data = RawDat, aes_(y = substitute(stream), x = substitute(-Tanom.iktCs), size = substitute(Response)), 
+               position = position_jitter(width = 0.05, height = 0.025), shape = 21, fill = "transparent", alpha= 0.5) +
+    scale_size_binned(n.breaks = 4, nice.breaks = TRUE) +
+    ylab("Stream") +
+    xlab("Mean daily temp (-1 * centered 1/kT)")
+  STRvDoyTFig
+}
+```
+
+```{r}
+F1.ER_all_B <- STRvDoyTFigFun(ModelPred = P.ER_all.b, Response = lER, RawDat = metAll)
+F1.GPP_all_B <- STRvDoyTFigFun(ModelPred = P.GPP_all.b, Response = lGPP, RawDat = metAll)
+F1.NEP_all_B <- STRvDoyTFigFun(ModelPred = P.NEP_all.b, Response = NEP, RawDat = metAll)
+```
+
+```{r}
+# F1.ER_N_B ----------- BEST MODEL IS TEMP
+F1.GPP_N_B <- STRvDoyTFigFun(ModelPred = P.GPP_N.b, Response = lGPP, RawDat = metN)
+# F1.NEP_N_B  ----------- BEST MODEL IS TEMP
+```
+
+```{r}
+F1.ER_P_B <- STRvDoyTFigFun(ModelPred = P.ER_P.b, Response = lER, RawDat = metP)
+F1.GPP_P_B <- STRvDoyTFigFun(ModelPred = P.GPP_P.b, Response = lGPP, RawDat = metP)
+F1.NEP_P_B <- STRvDoyTFigFun(ModelPred = P.NEP_P.b, Response = NEP, RawDat = metP)
+```
+
+```{r}
+# F1.ER_AMB_B ----------- BEST MODEL IS TEMP
+F1.GPP_AMB_B <- STRvDoyTFigFun(ModelPred = P.GPP_AMB.b, Response = lGPP, RawDat = metAMB)
+F1.NEP_AMB_B <- STRvDoyTFigFun(ModelPred = P.NEP_AMB.b, Response = NEP, RawDat = metAMB)
+```
+
+## Response only figs
+with stream/stream temp v. daily temp
+```{r}
+GPP_AMB_use <- F1.GPP_AMB_T
+  ER_AMB_use <- F1.ER_AMB_T
+  NEP_AMB_use <- F1.NEP_AMB_T
+  
+  GPP_N_use <- F1.GPP_N_T
+  ER_N_use <- F1.ER_N_T
+  NEP_N_use <- F1.NEP_N_T
+  
+  GPP_P_use <- F1.GPP_P_B
+  ER_P_use <- F1.ER_P_B
+  NEP_P_use <- F1.NEP_P_B
+
+```
+
+
+
+### Print
+Best models
+```{r include = FALSE}
+# pdf(file.path(here::here("03_Plots"), "01_Fig1bestModels.pdf"), height = 10, width = 17)
+# ggarrange(F1.ER_all_B, F1.GPP_all_B, F1.NEP_all_B,
+#           F1.ER_AMB_T, F1.GPP_AMB_B, F1.NEP_AMB_B,
+#           F1.ER_N_T, F1.GPP_N_B, F1.NEP_N_T,
+#           F1.ER_P_B, F1.GPP_P_B, F1.NEP_P_B,
+#           nrow = 4, ncol = 3)
+# dev.off()
+```
+
+Temp models
+```{r include = FALSE}
+# pdf(file.path(here::here("03_Plots"), "01_Fig1TempModels.pdf"), height = 10, width = 17)
+# ggarrange(F1.ER_all_T, F1.GPP_all_T, F1.NEP_all_T,
+#           F1.ER_AMB_T, F1.GPP_AMB_T, F1.NEP_AMB_T,
+#           F1.ER_N_T, F1.GPP_N_T, F1.NEP_N_T,
+#           F1.ER_P_T, F1.GPP_P_T, F1.NEP_P_T,
+#           nrow = 4, ncol = 3)
+# dev.off()
+```
+
+# Effect size figs
+
+## Functions
+## Temp
+```{r}
+EfctPlotFun.all <- function(ModelPred, GGtitle4plot){
+  ModelPredL <- ModelPred %>% 
+    pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+    mutate(N_amb = exp(fit_nitrogen)/exp(fit_ambient),
+           P_amb = exp(fit_phosphorus)/exp(fit_ambient)) %>%
+    pivot_longer(cols = N_amb:P_amb, names_to = "treatment", values_to = "effectSize") %>% 
+    mutate(treatment = fct_recode(treatment, Nitrogen = "N_amb", Phosphorus = "P_amb"))
+  
+  ggplot(ModelPredL, aes(y = -invKT.C.StMean, x = -Tanom.iktCs, fill = effectSize)) +
+        geom_raster() +
+        scale_fill_distiller(palette = "Spectral") +
+        ylab("Mean summer temp (-1 * centered 1/kT)") +
+        xlab("Mean daily temp (-1 * centered 1/kT)") +
+        facet_wrap(vars(treatment), nrow = 2, ncol = 1) +
+        ggtitle(GGtitle4plot)
+}
+```
+
+```{r}
+EfctPlotFun.all.NEP <- function(ModelPred, GGtitle4plot){
+  ModelPredL <- ModelPred %>% 
+    pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+    mutate(N_amb = fit_nitrogen/fit_ambient,
+           P_amb = fit_phosphorus/fit_ambient) %>%
+    pivot_longer(cols = N_amb:P_amb, names_to = "treatment", values_to = "effectSize") %>% 
+    mutate(treatment = fct_recode(treatment, Nitrogen = "N_amb", Phosphorus = "P_amb"))
+  
+  ggplot(ModelPredL, aes(y = -invKT.C.StMean, x = -Tanom.iktCs, fill = effectSize)) +
+        geom_raster() +
+        scale_fill_distiller(palette = "Spectral") +
+        ylab("Mean summer temp (-1 * centered 1/kT)") +
+        xlab("Mean daily temp (-1 * centered 1/kT)") +
+        facet_wrap(vars(treatment), nrow = 2, ncol = 1) +
+        ggtitle(GGtitle4plot)
+}
+```
+
+```{r}
+EfctPlotFun.N <- function(ModelPred, GGtitle4plot){
+  ModelPredL <- ModelPred %>% 
+    pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+    mutate(N_amb = exp(fit_nitrogen)/exp(fit_ambient)) %>%
+    pivot_longer(cols = N_amb, names_to = "treatment", values_to = "effectSize") %>% 
+    mutate(treatment = fct_recode(treatment, Nitrogen = "N_amb"))
+  
+  ggplot(ModelPredL, aes(y = -invKT.C.StMean, x = -Tanom.iktCs, fill = effectSize)) +
+        geom_raster() +
+        scale_fill_distiller(palette = "Spectral") +
+        ylab("Mean summer temp (-1 * centered 1/kT)") +
+        xlab("Mean daily temp (-1 * centered 1/kT)") +
+        facet_wrap(vars(treatment), nrow = 2, ncol = 1) +
+        ggtitle(GGtitle4plot)
+}
+```
+
+```{r}
+EfctPlotFun.N.NEP <- function(ModelPred, GGtitle4plot){
+  ModelPredL <- ModelPred %>% 
+    pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+    mutate(N_amb = (fit_ambient - fit_nitrogen)/ fit_ambient) %>%
+    pivot_longer(cols = N_amb, names_to = "treatment", values_to = "effectSize") %>% 
+    mutate(treatment = fct_recode(treatment, Nitrogen = "N_amb"))
+  
+  ggplot(ModelPredL, aes(y = -invKT.C.StMean, x = -Tanom.iktCs, fill = effectSize)) +
+        geom_raster() +
+        scale_fill_distiller(palette = "Spectral") +
+        ylab("Mean summer temp (-1 * centered 1/kT)") +
+        xlab("Mean daily temp (-1 * centered 1/kT)") +
+        facet_wrap(vars(treatment), nrow = 2, ncol = 1) +
+        ggtitle(GGtitle4plot)
+}
+```
+
+
+```{r}
+EfctPlotFun.P <- function(ModelPred, GGtitle4plot){
+  ModelPredL <- ModelPred %>% 
+    pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+    mutate(P_amb = exp(fit_phosphorus)/exp(fit_ambient)) %>%
+    pivot_longer(cols = P_amb, names_to = "treatment", values_to = "effectSize") %>% 
+    mutate(treatment = fct_recode(treatment, Phosphorus = "P_amb"))
+  
+  ggplot(ModelPredL, aes(y = -invKT.C.StMean, x = -Tanom.iktCs, fill = effectSize)) +
+        geom_raster() +
+        scale_fill_distiller(palette = "Spectral") +
+        ylab("Mean summer temp (-1 * centered 1/kT)") +
+        xlab("Mean daily temp (-1 * centered 1/kT)") +
+        facet_wrap(vars(treatment), nrow = 2, ncol = 1) +
+        ggtitle(GGtitle4plot)
+}
+```
+
+```{r}
+EfctPlotFun.P.NEP <- function(ModelPred, GGtitle4plot){
+  ModelPredL <- ModelPred %>% 
+    pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+    mutate(P_amb = (fit_ambient - fit_phosphorus)/ fit_ambient) %>%
+    pivot_longer(cols = P_amb, names_to = "treatment", values_to = "effectSize") %>% 
+    mutate(treatment = fct_recode(treatment, Phosphorus = "P_amb"))
+  
+  ggplot(ModelPredL, aes(y = -invKT.C.StMean, x = -Tanom.iktCs, fill = effectSize)) +
+        geom_raster() +
+        scale_fill_distiller(palette = "Spectral") +
+        ylab("Mean summer temp (-1 * centered 1/kT)") +
+        xlab("Mean daily temp (-1 * centered 1/kT)") +
+        facet_wrap(vars(treatment), nrow = 2, ncol = 1) +
+        ggtitle(GGtitle4plot)
+}
+```
+
+```{r}
+EfctPlotFun.P.str <- function(ModelPred, GGtitle4plot){
+  ModelPredL <- ModelPred %>% 
+  pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+  mutate(P_amb = exp(fit_phosphorus)/exp(fit_ambient)) %>%
+  pivot_longer(cols = P_amb, names_to = "treatment", values_to = "effectSize") %>% 
+  mutate(treatment = fct_recode(treatment, Phosphorus = "P_amb"),
+         stream = fct_recode(stream, "S6" = "st6", "S9" = "st9", "S18" = "st18", "S11" = "st11U"),
+         stream = fct_relevel(stream, c("S11", "S18", "S9", "S6")))
+
+ggplot(ModelPredL, aes(y = stream, x = -Tanom.iktCs, fill = effectSize)) +
+  geom_raster() +
+  scale_fill_distiller(palette = "Spectral") +
+  ylab("Mean summer temp (-1 * centered 1/kT)") +
+  xlab("Mean daily temp (-1 * centered 1/kT)") +
+  facet_wrap(vars(treatment), nrow = 2, ncol = 1) +
+  ggtitle(GGtitle4plot)
+}
+```
+
+```{r}
+EfctPlotFun.P.str.NEP <- function(ModelPred, GGtitle4plot){
+  ModelPredL <- ModelPred %>% 
+  pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+  mutate(P_amb = (fit_ambient - fit_phosphorus)/ fit_ambient) %>%
+  pivot_longer(cols = P_amb, names_to = "treatment", values_to = "effectSize") %>% 
+  mutate(treatment = fct_recode(treatment, Phosphorus = "P_amb"),
+         stream = fct_recode(stream, "S6" = "st6", "S9" = "st9", "S18" = "st18", "S11" = "st11U"),
+         stream = fct_relevel(stream, c("S11", "S18", "S9", "S6")))
+
+ggplot(ModelPredL, aes(y = stream, x = -Tanom.iktCs, fill = effectSize)) +
+  geom_raster() +
+  scale_fill_distiller(palette = "Spectral") +
+  ylab("Mean summer temp (-1 * centered 1/kT)") +
+  xlab("Mean daily temp (-1 * centered 1/kT)") +
+  facet_wrap(vars(treatment), nrow = 2, ncol = 1) +
+  ggtitle(GGtitle4plot)
+}
+```
+
+
+
+
+### ER 
+#### all
+```{r include = FALSE}
+F2.ER_all_T <- EfctPlotFun.all(ModelPred = P.ER_all.t, GGtitle4plot = "ER all - Temp")
+```
+
+#### N
+```{r include = FALSE}
+F2.ER_N_T <- EfctPlotFun.N(ModelPred = P.ER_N.b, GGtitle4plot = "ER N - Temp")
+```
+
+#### P
+```{r include = FALSE}
+F2.ER_P_T <- EfctPlotFun.P(ModelPred = P.ER_P.t, GGtitle4plot = "ER P - Temp")
+```
+
+### GPP 
+#### all
+```{r include = FALSE}
+F2.GPP_all_T <- EfctPlotFun.all(ModelPred = P.GPP_all.t, GGtitle4plot = "GPP all - Temp")
+```
+
+#### N
+```{r include = FALSE}
+F2.GPP_N_T <- EfctPlotFun.N(ModelPred = P.GPP_N.t, GGtitle4plot = "GPP N - Temp")
+```
+
+#### P
+```{r include = FALSE}
+# NOT POSSIBLE FOR THIS NO TREATMENT IN MODEL
+```
+
+
+### NEP 
+#### all
+```{r include = FALSE}
+F2.NEP_all_T <- EfctPlotFun.all.NEP(ModelPred = P.NEP_all.t, GGtitle4plot = "NEP all - Temp")
+```
+
+#### N
+```{r include = FALSE}
+F2.NEP_N_T <- EfctPlotFun.N.NEP(ModelPred = P.NEP_N.b, GGtitle4plot = "NEP N - Temp")
+```
+
+#### P
+```{r include = FALSE}
+F2.NEP_P_T <- EfctPlotFun.P.NEP(ModelPred = P.NEP_P.t, GGtitle4plot = "NEP P - Temp")
+```
+
+```{r include = FALSE}
+blank <- grid.rect(gp=gpar(col="white"))
+pdf(file.path(here::here("03_Plots"), "02_Fig2TempModels.pdf"), height = 10, width = 17)
+ggarrange(F2.ER_all_T, F2.GPP_all_T, F2.NEP_all_T,
+          F2.ER_N_T, F2.GPP_N_T, F2.NEP_N_T,
+          F2.ER_P_T,blank, F2.NEP_P_T)
+dev.off()
+```
+
+## Stream (not stream temp)
+
+### ER
+#### P
+```{r include = FALSE}
+F2.ER_P_glob <- EfctPlotFun.P.str(ModelPred = P.ER_P.b, GGtitle4plot = "ER P - Global")
+```
+
+### GPP
+#### P
+```{r include = FALSE}
+F2.GPP_P_glob <- EfctPlotFun.P.str(ModelPred = P.GPP_P.b, GGtitle4plot = "GPP P - Global")
+```
+
+### NEP
+#### P
+```{r include = FALSE}
+P.NEP_P.b.eftPlot <- P.NEP_P.b %>% 
+      pivot_wider(names_from = treatment, values_from = c(fit,se.fit)) %>% 
+      mutate(P_amb = (fit_ambient - fit_phosphorus)/ fit_ambient) 
+    
+F2.NEP_P_glob <- ggplot(P.NEP_P.b.eftPlot, aes(y = stream, x = -Tanom.iktCs, fill = P_amb)) +
+      geom_raster() +
+      scale_fill_distiller(palette = "Spectral") +
+      ylab("Stream") +
+      xlab("Mean daily temp (-1 * centered 1/kT)") 
+```
+
+# Best summary figs
+## Nitrogen
+```{r include = FALSE}
+# pdf(file.path(here::here("03_Plots"), "03_Fig3BestNadd.pdf"), height = 10, width = 17)
+# ggarrange(F0_ER_N, F1.ER_N_T, F2.ER_N_T,
+#           F0_GPP_N, F1.GPP_N_T, F2.GPP_N_T,
+#           F0_NEP_N, F1.NEP_N_T, F2.NEP_N_T)
+# dev.off()
+```
+
+## Phosphorus
+```{r include = FALSE}
+# pdf(file.path(here::here("03_Plots"), "03_Fig3BestPadd.pdf"), height = 10, width = 17)
+# tiff(file.path(here::here("03_Plots"), "03_Fig3BestPadd.tiff"), height = 5000, width = 8500, res = 400)
+# ggarrange(F0_ER_P, F1.ER_P_B, F2.ER_P_glob,
+#           F0_GPP_P, F1.GPP_P_B, F2.GPP_P_glob,
+#           F0_NEP_P, F1.NEP_P_B, F2.NEP_P_glob,
+#           nrow = 3, ncol = 3)
+# dev.off()
+```
+
+
+## Ambient
+```{r include = FALSE}
+# tiff(file.path(here::here("03_Plots"), "03_Fig3BestAMB.tiff"), height = 5000, width = 8500, res = 400)
+# ggarrange(F1.ER_AMB_T, F1.GPP_AMB_B, F1.NEP_AMB_B,
+#           F1.ER_AMB_T, F1.GPP_AMB_T, F1.NEP_AMB_T,
+#           nrow = 2, ncol = 3)
+# dev.off()
+```
+
+
+
+
+
+# Final Fig
+## Effect size plots
+```{r}
+Fig1a.g <- ggplotGrob(F2.GPP_N_T)
+Fig1b.g <- ggplotGrob(F2.ER_N_T)
+Fig1c.g <- ggplotGrob(F2.NEP_N_T)
+Fig1d.g <- ggplotGrob(F2.GPP_P_glob)
+Fig1e.g <- ggplotGrob(F2.ER_P_glob)
+Fig1f.g <- ggplotGrob(F2.NEP_P_glob)
+
+Fig1a.gtf <- gtable_frame(Fig1a.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig1b.gtf <- gtable_frame(Fig1b.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig1c.gtf <- gtable_frame(Fig1c.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig1d.gtf <- gtable_frame(Fig1d.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig1e.gtf <- gtable_frame(Fig1e.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig1f.gtf <- gtable_frame(Fig1f.g,  width = unit(1, "null"), height = unit(1, "null"))
+
+Fig1abc.gtf <- gtable_frame(gtable_cbind(Fig1a.gtf, Fig1b.gtf, Fig1c.gtf),  width = unit(3, "null"), height = unit(1, "null"))
+Fig1def.gtf <- gtable_frame(gtable_cbind(Fig1d.gtf, Fig1e.gtf, Fig1f.gtf),  width = unit(3, "null"), height = unit(1, "null"))
+Fig1.gtf <- gtable_frame(gtable_rbind(Fig1abc.gtf, Fig1def.gtf),  width = unit(3, "null"), height = unit(2, "null"))
+
+png(file.path(here("03_Plots"), "EffectsPlot.png"), units = "in", height = 7, width = 15, res = 300)
+grid.newpage()
+grid.draw(Fig1.gtf)
+  grid.text("(a)", x = unit(0.04,"npc"), y = unit(0.98,"npc"), gp=gpar(fontsize = 25))
+  grid.text("(b)", x = unit(0.33,"npc"), y = unit(0.65,"npc"), gp=gpar(fontsize = 25))
+  grid.text("(c)", x = unit(0.66,"npc"), y = unit(0.33,"npc"), gp=gpar(fontsize = 25))
+  grid.text("(d)", x = unit(0.04,"npc"), y = unit(0.98,"npc"), gp=gpar(fontsize = 25))
+  grid.text("(e)", x = unit(0.04,"npc"), y = unit(0.65,"npc"), gp=gpar(fontsize = 25))
+  grid.text("(f)", x = unit(0.04,"npc"), y = unit(0.33,"npc"), gp=gpar(fontsize = 25))
+dev.off()
+
+```
+
+
+
+```{r}
+JMHThemeTOP <-  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        legend.position = "top",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 12)) 
+JMHThemeREST <-  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+                      legend.position = "none",
+                      panel.grid.major = element_blank(),
+                      panel.grid.minor = element_blank(),
+                      axis.text = element_text(size = 12)) 
+
+GPPLims <- c(-0.50,4)
+ERLims <- c(-0.5,3.5)
+NEPLims <- c(-22,5.5)
+
+
+  
+
+
+# Ambient plots - uses stream temp
+#using stream temp models for ambient because that is our initial hypothesis
+ER_AMB_use <- AnTvDoyTFigFunRespose(ModelPred = P.ER_AMB.b, Response = lER, RawDat = metAMB) +
+                  JMHThemeTOP +
+                    scale_fill_distiller(palette = "Spectral", limits = ERLims) +
+                    xlab(NULL) +
+                    ylab(NULL)
+GPP_AMB_use <- AnTvDoyTFigFunRespose(ModelPred = P.GPP_AMB.t, Response = lGPP, RawDat = metAMB) +
+                  JMHThemeTOP +
+                  scale_fill_distiller(palette = "Spectral", limits = GPPLims) +
+                  xlab(NULL) +
+                  ylab(NULL)
+NEP_AMB_use <- AnTvDoyTFigFunRespose(ModelPred = P.NEP_AMB.t, Response = NEP, RawDat = metAMB )+
+                    JMHThemeTOP +
+                    scale_fill_distiller(palette = "Spectral", limits = NEPLims) +
+                    xlab(NULL) +
+                    ylab(NULL)
+
+
+
+# N: stream temp models
+ER_N_use <- AnTvDoyTFigFunRespose(ModelPred = P.ER_N.b, Response = lER, RawDat = metN %>% 
+                                    filter(treatment == "nitrogen")) +
+                                JMHThemeREST +
+                                scale_fill_distiller(palette = "Spectral", limits = ERLims) +
+                                xlab(NULL) +
+                                ylab(NULL)
+GPP_N_use <- AnTvDoyTFigFunRespose(ModelPred = P.GPP_N.t, Response = lGPP, RawDat = metN %>% 
+                                     filter(treatment == "nitrogen"))+
+                              JMHThemeREST +
+                              scale_fill_distiller(palette = "Spectral", limits = GPPLims) +
+                              xlab(NULL) +
+                              ylab(NULL)
+
+NEP_N_use <- AnTvDoyTFigFunRespose(ModelPred = P.NEP_N.b, Response = NEP, RawDat = metN %>% 
+                                     filter(treatment == "nitrogen"))+
+                              JMHThemeREST +
+                              scale_fill_distiller(palette = "Spectral", limits = NEPLims) +
+                              xlab(NULL) +
+                              ylab(NULL)
+
+# P: stream models
+ER_P_use <- AnTvDoyTFigFunRespose_s(ModelPred = P.ER_P.b, Response = lER, RawDat = metP %>% 
+                                    filter(treatment == "phosphorus")) +
+                            JMHThemeREST +
+                            scale_fill_distiller(palette = "Spectral", limits = ERLims) +
+                            xlab(NULL) +
+                            ylab(NULL)
+GPP_P_use <- AnTvDoyTFigFunRespose_s(ModelPred = P.GPP_P.b, Response = lGPP, RawDat = metP %>% 
+                                     filter(treatment == "phosphorus"))+
+                        JMHThemeREST +
+                        scale_fill_distiller(palette = "Spectral", limits = GPPLims) +
+                        xlab(NULL) +
+                        ylab(NULL)
+NEP_P_use <- AnTvDoyTFigFunRespose_s(ModelPred = P.NEP_P.b, Response = NEP, RawDat = metP %>% 
+                                     filter(treatment == "phosphorus"))+
+                          JMHThemeREST +
+                          scale_fill_distiller(palette = "Spectral", limits = NEPLims) +
+                          xlab(NULL) +
+                          ylab(NULL)
+
+
+Fig2a.g <- ggplotGrob(GPP_AMB_use)
+Fig2b.g <- ggplotGrob(ER_AMB_use)
+Fig2c.g <- ggplotGrob(NEP_AMB_use)
+Fig2d.g <- ggplotGrob(GPP_N_use)
+Fig2e.g <- ggplotGrob(ER_N_use)
+Fig2f.g <- ggplotGrob(NEP_N_use)
+Fig2g.g <- ggplotGrob(GPP_P_use)
+Fig2h.g <- ggplotGrob(ER_P_use)
+Fig2i.g <- ggplotGrob(NEP_P_use)
+blank.g <- ggplotGrob(ggplot()+
+                        geom_blank()+
+                        theme(panel.background = element_rect(fill = "transparent")))
+
+Fig2a.gtf <- gtable_frame(Fig2a.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2b.gtf <- gtable_frame(Fig2b.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2c.gtf <- gtable_frame(Fig2c.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2d.gtf <- gtable_frame(Fig2d.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2e.gtf <- gtable_frame(Fig2e.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2f.gtf <- gtable_frame(Fig2f.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2g.gtf <- gtable_frame(Fig2g.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2h.gtf <- gtable_frame(Fig2h.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2i.gtf <- gtable_frame(Fig2i.g,  width = unit(1, "null"), height = unit(1, "null"))
+Fig2bkTop <- gtable_frame(blank.g, width = unit(3, "null"), height = unit(0.3, "null"))
+Fig2bkLeft <- gtable_frame(blank.g, width = unit(0.2, "null"), height = unit(2, "null"))
+
+
+
+Fig2abc.gtf <- gtable_frame(gtable_cbind(Fig2a.gtf, Fig2b.gtf, Fig2c.gtf),  width = unit(3, "null"), height = unit(1, "null"))
+Fig2def.gtf <- gtable_frame(gtable_cbind(Fig2d.gtf, Fig2e.gtf, Fig2f.gtf),  width = unit(3, "null"), height = unit(1, "null"))
+Fig2ghi.gtf <- gtable_frame(gtable_cbind(Fig2g.gtf, Fig2h.gtf, Fig2i.gtf),  width = unit(3, "null"), height = unit(1, "null"))
+Fig2.gtf <- gtable_frame(gtable_rbind(Fig2abc.gtf, Fig2def.gtf, Fig2ghi.gtf),  width = unit(3, "null"), height = unit(2, "null"))
+
+# was 7 high by 15 wide
+png(file.path(here("03_Plots"), "ResponsePlots.png"), units = "in", height = 10, width = 14, res = 300)
+grid.newpage()
+grid.draw(Fig2.gtf)
+# grid.text("GPP", x = unit(0.26,"npc"), y = unit(0.94,"npc"), gp=gpar(fontsize = 35))
+# grid.text("ER", x = unit(0.56,"npc"), y = unit(0.94,"npc"), gp=gpar(fontsize = 35))
+# grid.text("NEP", x = unit(0.87,"npc"), y = unit(0.94,"npc"), gp=gpar(fontsize = 35))
+# grid.text("Ambient", x = unit(0.02,"npc"), y = unit(0.75,"npc"), gp=gpar(fontsize = 35, str = 90))
+# grid.text("(a)", x = unit(0.11,"npc"), y = unit(0.83,"npc"), gp=gpar(fontsize = 20, fontface = "bold"))
+# grid.text("(b)", x = unit(0.41,"npc"), y = unit(0.83,"npc"), gp=gpar(fontsize = 20, fontface = "bold"))
+# grid.text("(c)", x = unit(0.71,"npc"), y = unit(0.83,"npc"), gp=gpar(fontsize = 20, fontface = "bold"))
+# grid.text("(d)", x = unit(0.04,"npc"), y = unit(0.98,"npc"), gp=gpar(fontsize = 20, fontface = "bold"))
+# grid.text("(e)", x = unit(0.04,"npc"), y = unit(0.65,"npc"), gp=gpar(fontsize = 20, fontface = "bold"))
+# grid.text("(f)", x = unit(0.04,"npc"), y = unit(0.33,"npc"), gp=gpar(fontsize = 20, fontface = "bold"))
+dev.off()
+
+
+```
+
+
+
+
+# Save images
+```{r}
+# save.image(file.path(here::here("04_SavedImages"), "05_Figures_Rdat"))
+# load(file.path(here::here("04_SavedImages"), "05_Figures_Rdat"))
+```
+

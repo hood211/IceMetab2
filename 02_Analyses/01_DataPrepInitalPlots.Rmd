@@ -1,0 +1,243 @@
+---
+title: "Data prep and initial plots"
+author: "JMH"
+date: "11/19/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(here)
+library(MuMIn)
+```
+
+## Load & munge data
+
+Loads data, calculates log GPP and ER,  and centers stream water temp at 10C as inverse kT. Converts GPP, ER, and NEP to units C.
+```{r message=FALSE, warning=FALSE}
+
+met3 <- readr::read_csv(file = file.path(here::here("01_Data"),"00_metab_for_Hoodie.csv")) 
+met2 <- met3 %>% 
+  mutate(Pdt = as.POSIXct(Pdt, format = "%m/%d/%y"),
+         doy = as.numeric(strftime(Pdt, format = "%j")),
+         Y = as.numeric(strftime(Pdt, format = "%Y")),
+         Yf = as.factor(as.character(Y)),
+         # convert from o2 to C
+         GPP_medianC = GPP_median * (1/1.2) * (12/32), # from Bott 2006
+         ER_medianC = ER_median * 0.85 * (12/32), # from Bott 2006
+         NEPC = GPP_medianC + ER_medianC,
+         lGPP = log(GPP_medianC),
+         lER = log(-ER_medianC),
+         #centering
+         invKT.C = one_over_kT - 1/((10 + 273.15)*0.0000862),
+         streamTreat = as.factor(paste0(stream,"_",treatment))) %>% 
+  mutate_at(vars(stream, treatment), funs(as.factor(.))) %>% 
+  rename(invKT = one_over_kT) %>% 
+   filter(doy >=183)
+```
+
+For predictor variables, we want to center Temp, light, Q, and GPP. We'll do that using stream means, which we calculate below
+```{r}
+# stream mean
+metS <- met2 %>% 
+  group_by(stream, treatment) %>% 
+  summarise_at(vars(meanTemp, invKT.C, meanQds, LightPerDay, lGPP), funs(mean(., na.rm = TRUE))) %>% 
+  group_by(stream) %>% 
+  summarise_at(vars(meanTemp, invKT.C, meanQds, LightPerDay, lGPP), funs(mean(., na.rm = TRUE))) %>% 
+  rename_at(vars(-stream), function(x) paste0(x,".StMean"))
+
+# global mean
+metG0 <- met2 %>% 
+  group_by(stream, treatment) %>% 
+  summarise_at(vars(meanTemp, invKT.C, meanQds, LightPerDay, lGPP), funs(mean(., na.rm = TRUE))) %>% 
+  group_by(stream) %>% 
+  summarise_at(vars(meanTemp, invKT.C, meanQds, LightPerDay, lGPP), funs(mean(., na.rm = TRUE))) %>% 
+  group_by() %>% 
+  summarise_at(vars(meanTemp, invKT.C, meanQds, LightPerDay, lGPP), funs(mean(., na.rm = TRUE)))%>% 
+  rename_at(vars(meanTemp:lGPP), function(x) paste0(x,".GMean"))
+
+metG <- rbind(metG0, metG0, metG0, metG0)
+metG$stream <- c("st11U", "st18", "st6", "st9")
+```
+
+Now, we log transform Q, GPP, and light then center on mean logged value (you can't center then log).  I'll leave all the global centered values in here, but we will use the stream centered values.
+```{r}
+met <- met2 %>% 
+  full_join(metS, by = "stream") %>% 
+  full_join(metG, by = "stream") %>% 
+  #these are centered on the stream mean
+  mutate(Tanom.iktCs = invKT.C - invKT.C.StMean, #stream mean
+         Tanom.iktCg = invKT.C - invKT.C.GMean,  #global mean
+         Tanom.Cs = meanTemp - meanTemp.StMean,
+         Tanom.Cg = meanTemp - meanTemp.GMean,
+         LightPerDayCs = LightPerDay - LightPerDay.StMean,
+         LightPerDayCg = LightPerDay - LightPerDay.GMean,
+         meanQdsCs = meanQds - meanQds.StMean,
+         meanQdsCg = meanQds - meanQds.GMean,
+         LightPerDay.l = log(LightPerDay),
+         meanQds.l = log(meanQds),
+         LightPerDay.lcs = LightPerDay.l - log(LightPerDay.StMean),
+         LightPerDay.lcg = LightPerDay.l - log(LightPerDay.GMean),
+         meanQds.lcs = meanQds.l - log(meanQds.StMean),
+         meanQds.lcg = meanQds.l - log(meanQds.GMean),
+         lGPP.cs = lGPP - lGPP.StMean,
+         lGPP.cg = lGPP - lGPP.GMean,
+         streamTreat = paste0(stream," ", treatment),
+         stream = as.factor(stream))
+```
+
+# quick visualization of predictor variables
+## Light
+
+No clear differences among stream or years. Light is generally normal.
+```{r echo=FALSE}
+ggplot(met, aes(y = LightPerDay.lcs, x = doy, color = Yf)) +
+  geom_line() +
+  facet_grid(. ~ stream)
+```
+
+
+```{r echo=FALSE}
+ggplot(met, aes(sample = LightPerDay.lcg, color = stream)) +stat_qq() + stat_qq_line()+
+  facet_grid(.~stream)
+```
+
+## Discharge
+
+Not huge differences among years, although there are some periods where 2017 is wetter. Q is normal.
+```{r echo=FALSE}
+ggplot(met, aes(y = meanQds.lcs, x = doy, color = Yf)) +
+  geom_line() +
+  facet_grid(. ~ stream)
+```
+
+```{r echo=FALSE}
+ggplot(met, aes(sample = meanQds.lcs, color = stream)) +stat_qq() + stat_qq_line()+
+  facet_grid(.~stream)
+```
+
+## Temperature
+
+No huge differences among years.
+
+```{r echo=FALSE}
+ggplot(met, aes(x = Tanom.iktCs, y = doy, color = Yf)) +
+  geom_point() +
+  facet_grid(stream ~ treatment) +
+  stat_smooth()
+```
+
+```{r echo=FALSE}
+ggplot(met, aes(sample = Tanom.iktCs, color = stream)) +stat_qq() + stat_qq_line()+
+  facet_grid(.~stream)
+```
+
+
+## Correlation between Q and Temp
+
+These can not be in the same model together
+```{r echo=FALSE}
+ggplot(met, aes(y = Tanom.iktCs, x = meanQds.lcs, color = Yf)) +
+  geom_point() +
+  facet_grid(. ~ stream)
+```
+
+```{r echo=FALSE}
+ggplot(met, aes(y = meanQds, x = julian, color = Yf)) +
+  geom_point() +
+  facet_grid(stream ~ ., scales = "free_y") 
+```
+
+Correlations beetween temp and Q
+```{r echo=FALSE}
+met %>% 
+  group_by(stream) %>% 
+  summarize(currelation = cor(meanQdsCg, Tanom.iktCg))
+```
+
+Correlations beetween DOY and Q
+```{r echo=FALSE}
+met %>% 
+  group_by(stream) %>% 
+  summarize(currelation = cor(meanQdsCg, julian))
+```
+
+Q: Best model is Temp X stream
+```{r echo=FALSE}
+Qptemplm <- lm(meanQds.lcs ~ Tanom.iktCs + stream, met)
+Qxtemplm <- lm(meanQds.lcs ~ Tanom.iktCs * stream, met)
+model.sel(Qptemplm, Qxtemplm)
+```
+
+DOY: Best model is Temp + stream
+Note: this is just about separating temp and doy, leaving the DOY not related to temperature
+```{r echo=FALSE}
+DOYptemplm <- lm(doy ~ Tanom.iktCs + stream, met)
+DOYxtemplm <- lm(doy ~ Tanom.iktCs * stream, met)
+DOYxtemplm2 <- lm(doy ~ Tanom.iktCs * stream * treatment, met)
+model.sel(DOYptemplm, DOYxtemplm, DOYxtemplm2)
+```
+
+Temp ~ DOY: Best is DOY x stream
+```{r echo=FALSE}
+TempPdoylm <- lm(Tanom.iktCs ~ doy + stream, met)
+TempXdoylm <- lm(Tanom.iktCs ~ doy * stream, met)
+model.sel(TempPdoylm, TempXdoylm)
+```
+
+Put residuals in met
+```{r echo=FALSE}
+met$Qres <- residuals(Qxtemplm)
+met$DOYres <- residuals(DOYptemplm)
+met$DOYres2 <- residuals(DOYxtemplm2)
+met$Tempres <- residuals(TempXdoylm)
+```
+
+```{r}
+ggplot(met, aes(y = DOYres2, x = doy)) +
+  geom_point() +
+  facet_grid(stream ~ treatment) +
+  stat_smooth()
+```
+
+
+```{r}
+ggplot() +
+  geom_point(data = met, aes(y = DOYres, x = Tanom.iktCs)) +
+  geom_point(data = met, aes(y = DOYres2, x = Tanom.iktCs), color = "red") +
+  facet_grid(stream ~ treatment)
+```
+
+
+```{r}
+ggplot() +
+  geom_point(data = met, aes(y = DOYres, x = doy)) +
+  geom_point(data = met, aes(y = DOYres2, x = doy), color = "red") +
+  facet_grid(stream ~ treatment)
+```
+
+```{r}
+ggplot() +
+  geom_point(data = met, aes(y = -Tanom.iktCs, x = doy), color = "blue") +
+  facet_grid(stream ~ treatment)
+```
+
+
+# Export Data
+
+```{r include = FALSE}
+readr::write_csv(met, file.path(here::here("01_Data"), "01_MundgedMetabDat.csv"))
+```
+
+```{r}
+save.image(file.path(here::here("04_SavedImages"), "01_DataPrepInitalPlots_rdat"))
+```
+
+
+

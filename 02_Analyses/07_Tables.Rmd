@@ -1,0 +1,499 @@
+---
+title: "Untitled"
+author: "JMH"
+date: "3/18/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(kableExtra)
+```
+
+Load all models
+```{r}
+GPP_N_best <- read.csv(file.path(here::here("06_AICtables"), "03a_GPP_N.csv")) 
+names(GPP_N_best) <- c("Int", "strTemp", "DOYresXstr", "light", "QresXstr", "dayTemp", "trt", "strTempXdayTemp",
+                       "strTempXtrt", "DayTempXtrt", "strTempXDayTempXtrt", "Qres", "DOYresk5", "str", "DayTempXstr",
+                       "trtXstr", "DayTempXtrtXstr", "df", "logLik", "AIC", "delta", "weight")
+
+ER_N_best <- read.csv(file.path(here::here("06_AICtables"), "02a_ER_N.csv")) 
+names(ER_N_best) <- c("Int", "strTemp", "DOYresXstr", "QresXstr", "dayTemp", "trt", "strTempXdayTemp",
+                       "strTempXtrt", "DayTempXtrt", "strTempXDayTempXtrt", "Qres", "DOYresk5", "str", "DayTempXstr",
+                       "trtXstr", "DayTempXtrtXstr", "df", "logLik", "AIC", "delta", "weight")
+
+NEP_N_best <- read.csv(file.path(here::here("06_AICtables"), "03a_NEP_N.csv"))
+names(NEP_N_best) <- c("Int", "strTemp", "DOYresXstr", "light", "QresXstr", "dayTemp", "trt", 
+                       "strTempXtrt", "DayTempXtrt","Qres","strTempXdayTemp", "strTempXDayTempXtrt",  
+                       "DOYresk5", "str", "DayTempXstr",
+                       "trtXstr", "DayTempXtrtXstr", "df", "logLik", "AIC", "delta", "weight")
+
+
+GPP_P_best <- read.csv(file.path(here::here("06_AICtables"), "03a_GPP_P.csv")) 
+names(GPP_P_best) <- c("Int", "strTemp", 
+                       "DOYresXstr",
+                       "light", "QresXstr", "dayTemp", "trt", "strTempXdayTemp",
+                       "strTempXtrt", "DayTempXtrt", "strTempXDayTempXtrt", 
+                       "DOYresXstrM1",
+                       "Qres", "DOYresk5", "str", "DayTempXstr",
+                       "trtXstr", "DayTempXtrtXstr", "df", "logLik", "AIC", "delta", "weight")
+
+ER_P_best <- read.csv(file.path(here::here("06_AICtables"), "02a_ER_P.csv")) 
+names(ER_P_best) <- c("Int", "strTemp", "DOYresXstr", "QresXstr", "dayTemp", "trt", "strTempXdayTemp",
+                       "strTempXtrt", "DayTempXtrt", "strTempXDayTempXtrt", "Qres", "DOYresK4", "str", "DayTempXstr",
+                       "trtXstr", "DayTempXtrtXstr", "DOYresk5", "df", "logLik", "AIC", "delta", "weight")
+
+
+NEP_P_best <- read.csv(file.path(here::here("06_AICtables"), "03a_NEP_P.csv")) 
+names(NEP_P_best) <- c("Int", "strTemp", "DOYresXstrk4", "light", "QresXstr", "dayTemp", "trt", "strTempXdayTemp",
+                       "strTempXtrt", "DayTempXtrt", "strTempXDayTempXtrt", "DOYresXstrk5", "Qres", "DOYresk5", "str",
+                       "DayTempXstr",
+                       "trtXstr", "DayTempXtrtXstr", "df", "logLik", "AIC", "delta", "weight")
+
+
+GPP_AMB_best <- read.csv(file.path(here::here("06_AICtables"), "03d_GPP_AMB.csv")) 
+names(GPP_AMB_best) <- c("Int", "strTemp", "DOYresXstr", "light", "QresXstr", "dayTemp", "strTempXdayTemp",
+                        "Qres", "DOYresk5", "str", "DayTempXstr", "DOYresk4",
+                        "df", "logLik", "AIC", "delta", "weight")
+
+ER_AMB_best <- read.csv(file.path(here::here("06_AICtables"), "02d_ER_AMB.csv")) 
+names(ER_AMB_best) <- c("Int", "strTemp", "DOYresXstr", "QresXstr", "dayTemp", "strTempXdayTemp",
+                        "Qres", "DOYresk5", "str", "DayTempXstr",
+                        "df", "logLik", "AIC", "delta", "weight")
+
+NEP_AMB_best <- read.csv(file.path(here::here("06_AICtables"), "03d_NEP_AMB.csv")) 
+names(NEP_AMB_best) <- c("Int", "strTemp", "DOYresXstr", "light", "QresXstr", "dayTemp", "strTempXdayTemp",
+                        "Qres", "DOYresk5m1", "str", "DayTempXstr", "DOYresk5",
+                        "df", "logLik", "AIC", "delta", "weight")
+```
+
+
+
+Cleaned AIC csv files
+```{r}
+write.csv(GPP_AMB_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "01_GPP_AMB.csv"))
+write.csv(ER_AMB_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "01_ER_AMB.csv"))
+write.csv(NEP_AMB_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "01_NEP_AMB.csv"))
+
+write.csv(GPP_P_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "02_GPP_P.csv"))
+write.csv(ER_P_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "02_ER_P.csv"))
+write.csv(NEP_P_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "02_NEP_P.csv"))
+
+write.csv(GPP_N_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "03_GPP_N.csv"))
+write.csv(ER_N_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "03_ER_N.csv"))
+write.csv(NEP_N_best, file.path(here::here("06_AICtables/CleanedFullAICtables"), "03_NEP_N.csv"))
+
+
+
+```
+
+
+
+
+NOTHING BELOW THIS UPDATED.......
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Function to make dataframe
+  - Gets all models with delta AIC < 5
+  - If models with delta AIC < 5 don't contain temp, then it grabs the top temp models and any within a delta AIC of 2.
+Function for GPP and NEP, in treatments
+```{r}
+ModelTabFun_gppNEP_trt <- function(model.tab){
+  # model.tab <- GPP_N_best
+  model.tab.d5 <- model.tab %>% 
+  filter(delta < 5)
+
+TempInTopD5 <- max(ifelse(is.na(model.tab.d5$strTemp) == TRUE,1,0)) #if true 1 other 0 
+
+model.tab.Temp <- if(TempInTopD5 > 0) {
+  model.tab.TempPend <- model.tab %>% 
+    # get all of the models with stream temp
+    filter(!is.na(model.tab$strTemp)) %>% 
+    # calculate a new deltaAIC
+    mutate(delta2 = AIC - min(AIC)) %>% 
+    # get models with deltaAIC <2
+    filter(delta2 < 2) %>% 
+    select(-delta2)
+  
+  model.tab.final <-  rbind(model.tab.d5, model.tab.TempPend) %>% 
+  mutate(model = paste0(
+    ifelse(!is.na(strTempXDayTempXtrt),"strTemp X DayTemp X trt + ",
+      ifelse(is.na(strTempXDayTempXtrt) & !is.na(strTempXtrt) & !is.na(DayTempXtrt),"strTemp X trt + DayTemp X trt + ",
+        ifelse(is.na(strTempXDayTempXtrt) & !is.na(strTempXtrt) & is.na(DayTempXtrt), "strTemp X trt + ",
+          ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & !is.na(DayTempXtrt) & is.na(DayTempXtrtXstr),"DayTemp X trt + ",
+            ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(trt),
+                   "trt + ", ""))))),
+    ifelse(!is.na(DayTempXtrtXstr),"DayTemp X trt X str + ",
+           ifelse(is.na(DayTempXtrtXstr) & !is.na(DayTempXstr) & !is.na(trtXstr),"DayTemp X str + trt X str + ",
+              ifelse(is.na(DayTempXtrtXstr) & !is.na(DayTempXstr) & is.na(trtXstr), "strTemp X trt + ",
+                ifelse(is.na(strTempXDayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(DayTempXtrt) & is.na(trtXstr),"DayTemp X trt + ",
+                  ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(trt),
+                   "trt + ", ""))))),
+    ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & !is.na(strTemp),"strTemp + ",""),
+    ifelse(is.na(DayTempXtrtXstr) & is.na(DayTempXstr) & is.na(strTempXDayTempXtrt) & is.na(DayTempXtrt) & !is.na(dayTemp),"dayTemp + ",""),
+    ifelse(!is.na(DOYresXstr),"DOYres X str + ",""),
+    ifelse(!is.na(QresXstr),"Qres X str + ",""),
+    ifelse(!is.na(DOYres),"DOYres + ",""),
+    ifelse(!is.na(light), "L + ",""),
+    ifelse(!is.na(Qres),"Qres", ""))) %>% 
+  select(model, df, AIC, delta)
+  
+} else {
+  
+  model.tab.final <-  model.tab.d5 %>% 
+  mutate(model = paste0(
+    ifelse(!is.na(strTempXDayTempXtrt),"strTemp X DayTemp X trt + ",
+      ifelse(is.na(strTempXDayTempXtrt) & !is.na(strTempXtrt) & !is.na(DayTempXtrt),"strTemp X trt + DayTemp X trt + ",
+        ifelse(is.na(strTempXDayTempXtrt) & !is.na(strTempXtrt) & is.na(DayTempXtrt), "strTemp X trt + ",
+          ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & !is.na(DayTempXtrt) & is.na(DayTempXtrtXstr),"DayTemp X trt + ",
+            ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(trt),
+                   "trt + ", ""))))),
+    ifelse(!is.na(DayTempXtrtXstr),"DayTemp X trt X str + ",
+           ifelse(is.na(DayTempXtrtXstr) & !is.na(DayTempXstr) & !is.na(trtXstr),"DayTemp X str + trt X str + ",
+              ifelse(is.na(DayTempXtrtXstr) & !is.na(DayTempXstr) & is.na(trtXstr), "strTemp X trt + ",
+                ifelse(is.na(strTempXDayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(DayTempXtrt) & is.na(trtXstr),"DayTemp X trt + ",
+                  ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(trt),
+                   "trt + ", ""))))),
+    ifelse(is.na(DayTempXtrtXstr) & is.na(DayTempXstr) & is.na(trtXstr) & !is.na(trt),"trt + ",""),
+    ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & !is.na(strTemp),"strTemp + ",""),
+    ifelse(is.na(DayTempXtrtXstr) & is.na(DayTempXstr) & is.na(strTempXDayTempXtrt) & is.na(DayTempXtrt) & !is.na(dayTemp),"dayTemp + ",""),
+    ifelse(!is.na(DOYresXstr),"DOYres X str + ",""),
+    ifelse(!is.na(QresXstr),"Qres X str + ",""),
+    ifelse(!is.na(DOYres),"DOYres + ",""),
+    ifelse(!is.na(light), "L + ",""),
+    ifelse(!is.na(Qres),"Qres", ""))) %>% 
+  select(model, df, AIC, delta)
+}
+
+
+
+model.tab.final
+
+}
+
+```
+
+This is function for ER, since missing light, in treatments
+```{r}
+ModelTabFun_ER_trt <- function(model.tab){
+  # model.tab <- ER_N_best
+  model.tab.d5 <- model.tab %>% 
+  filter(delta < 5)
+
+TempInTopD5 <- max(ifelse(is.na(model.tab.d5$strTemp) == TRUE,1,0)) #if true 1 other 0 
+
+model.tab.Temp <- if(TempInTopD5 > 0) {
+  model.tab.TempPend <- model.tab %>% 
+    # get all of the models with stream temp
+    filter(!is.na(model.tab$strTemp)) %>% 
+    # calculate a new deltaAIC
+    mutate(delta2 = AIC - min(AIC)) %>% 
+    # get models with deltaAIC <2
+    filter(delta2 < 2) %>% 
+    select(-delta2)
+  
+  model.tab.final <-  rbind(model.tab.d5, model.tab.TempPend) %>% 
+  mutate(model = paste0(
+     ifelse(!is.na(strTempXDayTempXtrt),"strTemp X DayTemp X trt + ",
+      ifelse(is.na(strTempXDayTempXtrt) & !is.na(strTempXtrt) & !is.na(DayTempXtrt),"strTemp X trt + DayTemp X trt + ",
+        ifelse(is.na(strTempXDayTempXtrt) & !is.na(strTempXtrt) & is.na(DayTempXtrt), "strTemp X trt + ",
+          ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & !is.na(DayTempXtrt) & is.na(DayTempXtrtXstr),"DayTemp X trt + ",
+            ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(trt),
+                   "trt + ", ""))))),
+    ifelse(!is.na(DayTempXtrtXstr),"DayTemp X trt X str + ",
+           ifelse(is.na(DayTempXtrtXstr) & !is.na(DayTempXstr) & !is.na(trtXstr),"DayTemp X str + trt X str + ",
+              ifelse(is.na(DayTempXtrtXstr) & !is.na(DayTempXstr) & is.na(trtXstr), "strTemp X trt + ",
+                ifelse(is.na(strTempXDayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(DayTempXtrt) & is.na(trtXstr),"DayTemp X trt + ",
+                  ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(trt),
+                   "trt + ", ""))))),
+    ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & !is.na(strTemp),"strTemp + ",""),
+    ifelse(is.na(DayTempXtrtXstr) & is.na(DayTempXstr) & is.na(strTempXDayTempXtrt) & is.na(DayTempXtrt) & !is.na(dayTemp),"dayTemp + ",""),
+    ifelse(!is.na(DOYresXstr),"DOYres X str + ",""),
+    ifelse(!is.na(QresXstr),"Qres X str + ",""),
+    ifelse(!is.na(DOYres),"DOYres + ",""),
+    ifelse(!is.na(Qres),"Qres", ""))) %>% 
+  select(model, df, AIC, delta)
+  
+} else {
+  
+  model.tab.final <-  model.tab.d5 %>% 
+  mutate(model = paste0(
+     ifelse(!is.na(strTempXDayTempXtrt),"strTemp X DayTemp X trt + ",
+      ifelse(is.na(strTempXDayTempXtrt) & !is.na(strTempXtrt) & !is.na(DayTempXtrt),"strTemp X trt + DayTemp X trt + ",
+        ifelse(is.na(strTempXDayTempXtrt) & !is.na(strTempXtrt) & is.na(DayTempXtrt), "strTemp X trt + ",
+          ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & !is.na(DayTempXtrt) & is.na(DayTempXtrtXstr),"DayTemp X trt + ",
+            ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(trt),
+                   "trt + ", ""))))),
+    ifelse(!is.na(DayTempXtrtXstr),"DayTemp X trt X str + ",
+           ifelse(is.na(DayTempXtrtXstr) & !is.na(DayTempXstr) & !is.na(trtXstr),"DayTemp X str + trt X str + ",
+              ifelse(is.na(DayTempXtrtXstr) & !is.na(DayTempXstr) & is.na(trtXstr), "strTemp X trt + ",
+                ifelse(is.na(strTempXDayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(DayTempXtrt) & is.na(trtXstr),"DayTemp X trt + ",
+                  ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & is.na(DayTempXtrtXstr) & !is.na(trt),
+                   "trt + ", ""))))),
+    ifelse(is.na(strTempXDayTempXtrt) & is.na(strTempXtrt) & is.na(DayTempXtrt) & !is.na(strTemp),"strTemp + ",""),
+    ifelse(is.na(DayTempXtrtXstr) & is.na(DayTempXstr) & is.na(strTempXDayTempXtrt) & is.na(DayTempXtrt) & !is.na(dayTemp),"dayTemp + ",""),
+    ifelse(!is.na(DOYresXstr),"DOYres X str + ",""),
+    ifelse(!is.na(QresXstr),"Qres X str + ",""),
+    ifelse(!is.na(DOYres),"DOYres + ",""),
+    ifelse(!is.na(Qres),"Qres", ""))) %>% 
+  select(model, df, AIC, delta)
+}
+
+
+
+model.tab.final
+
+}
+
+```
+
+Function for GPP and NEP in amb
+```{r}
+ModelTabFun_gppNEP_amb <- function(model.tab){
+  # model.tab <- GPP_AMB_best
+  model.tab.d5 <- model.tab %>% 
+  filter(delta < 5)
+
+TempInTopD5 <- max(ifelse(is.na(model.tab.d5$strTemp) == TRUE,1,0)) #if true 1 other 0 
+
+model.tab.Temp <- if(TempInTopD5 > 0) {
+  model.tab.TempPend <- model.tab %>% 
+    # get all of the models with stream temp
+    filter(!is.na(model.tab$strTemp)) %>% 
+    # calculate a new deltaAIC
+    mutate(delta2 = AIC - min(AIC)) %>% 
+    # get models with deltaAIC <2
+    filter(delta2 < 2) %>% 
+    select(-delta2)
+  
+  model.tab.final <-  rbind(model.tab.d5, model.tab.TempPend) %>% 
+  mutate(model = paste0(
+    ifelse(!is.na(strTempXdayTemp), "strTemp X DayTemp + ",
+           ifelse(is.na(strTempXdayTemp) & !is.na(strTemp) & !is.na(dayTemp), "strTemp + dayTemp + ",
+                  ifelse(is.na(strTempXdayTemp) & !is.na(strTemp) & is.na(dayTemp), "strTemp + ",
+                         ifelse(is.na(strTempXdayTemp) & is.na(strTemp) & !is.na(dayTemp), "dayTemp + ","")))),
+    ifelse(!is.na(DOYresXstr),"DOYres X str + ",""),
+    ifelse(!is.na(QresXstr),"Qres X str + ",""),
+    ifelse(!is.na(DOYres),"DOYres + ",""),
+    ifelse(!is.na(light), "L + ",""),
+    ifelse(!is.na(Qres),"Qres", ""))) %>% 
+  select(model, df, AIC, delta)
+  
+} else {
+  
+  model.tab.final <-  model.tab.d5 %>% 
+  mutate(model = paste0(
+    ifelse(!is.na(strTempXdayTemp), "strTemp X DayTemp + ",
+           ifelse(is.na(strTempXdayTemp) & !is.na(strTemp) & !is.na(dayTemp), "strTemp + dayTemp + ",
+                  ifelse(is.na(strTempXdayTemp) & !is.na(strTemp) & is.na(dayTemp), "strTemp + ",
+                         ifelse(is.na(strTempXdayTemp) & is.na(strTemp) & !is.na(dayTemp), "dayTemp + ","")))),
+    ifelse(!is.na(DOYresXstr),"DOYres X str + ",""),
+    ifelse(!is.na(QresXstr),"Qres X str + ",""),
+    ifelse(!is.na(DOYres),"DOYres + ",""),
+    ifelse(!is.na(light), "L + ",""),
+    ifelse(!is.na(Qres),"Qres", ""))) %>% 
+  select(model, df, AIC, delta)
+}
+
+
+
+model.tab.final
+
+}
+
+```
+
+
+
+
+```{r}
+ModelTabFun_ER_amb <- function(model.tab){
+  # model.tab <- ER_N_best
+  model.tab.d5 <- model.tab %>% 
+  filter(delta < 5)
+
+TempInTopD5 <- max(ifelse(is.na(model.tab.d5$strTemp) == TRUE,1,0)) #if true 1 other 0 
+
+model.tab.Temp <- if(TempInTopD5 > 0) {
+  model.tab.TempPend <- model.tab %>% 
+    # get all of the models with stream temp
+    filter(!is.na(model.tab$strTemp)) %>% 
+    # calculate a new deltaAIC
+    mutate(delta2 = AIC - min(AIC)) %>% 
+    # get models with deltaAIC <2
+    filter(delta2 < 2) %>% 
+    select(-delta2)
+  
+  model.tab.final <-  rbind(model.tab.d5, model.tab.TempPend) %>% 
+ mutate(model = paste0(
+    ifelse(!is.na(strTempXdayTemp), "strTemp X DayTemp + ",
+           ifelse(is.na(strTempXdayTemp) & !is.na(strTemp) & !is.na(dayTemp), "strTemp + dayTemp + ",
+                  ifelse(is.na(strTempXdayTemp) & !is.na(strTemp) & is.na(dayTemp), "strTemp + ",
+                         ifelse(is.na(strTempXdayTemp) & is.na(strTemp) & !is.na(dayTemp), "dayTemp + ","")))),
+    ifelse(!is.na(DOYresXstr),"DOYres X str + ",""),
+    ifelse(!is.na(QresXstr),"Qres X str + ",""),
+    ifelse(!is.na(DOYres),"DOYres + ",""),
+    ifelse(!is.na(Qres),"Qres", ""))) %>% 
+  select(model, df, AIC, delta)
+  
+} else {
+  
+  model.tab.final <-  model.tab.d5 %>% 
+ mutate(model = paste0(
+    ifelse(!is.na(strTempXdayTemp), "strTemp X DayTemp + ",
+           ifelse(is.na(strTempXdayTemp) & !is.na(strTemp) & !is.na(dayTemp), "strTemp + dayTemp + ",
+                  ifelse(is.na(strTempXdayTemp) & !is.na(strTemp) & is.na(dayTemp), "strTemp + ",
+                         ifelse(is.na(strTempXdayTemp) & is.na(strTemp) & !is.na(dayTemp), "dayTemp + ","")))),
+    ifelse(!is.na(DOYresXstr),"DOYres X str + ",""),
+    ifelse(!is.na(QresXstr),"Qres X str + ",""),
+    ifelse(!is.na(DOYres),"DOYres + ",""),
+    ifelse(!is.na(Qres),"Qres", ""))) %>% 
+  select(model, df, AIC, delta)
+}
+
+
+
+model.tab.final
+
+}
+
+```
+
+```{r}
+GPP_N_best.mt <- ModelTabFun_gppNEP_trt(GPP_N_best)
+ER_N_best.mt <- ModelTabFun_ER_trt(ER_N_best)
+NEP_N_best.mt <- ModelTabFun_gppNEP_trt(NEP_N_best)
+
+GPP_P_best.mt <- ModelTabFun_gppNEP_trt(GPP_P_best)
+ER_P_best.mt <- ModelTabFun_ER_trt(ER_P_best)
+NEP_P_best.mt <- ModelTabFun_gppNEP_trt(NEP_P_best)
+
+GPP_AMB_best.mt <- ModelTabFun_gppNEP_amb(GPP_AMB_best)
+ER_AMB_best.mt <- ModelTabFun_ER_amb(ER_AMB_best)
+NEP_AMB_best.mt <- ModelTabFun_gppNEP_amb(NEP_AMB_best)
+```
+
+
+```{r}
+AllMods <- rbind(GPP_N_best.mt %>% 
+                   mutate(trt = "N",
+                          met = "GPP"),
+                 ER_N_best.mt %>% 
+                   mutate(trt = "N",
+                          met = "ER"),
+                 NEP_N_best.mt %>% 
+                   mutate(trt = "N",
+                          met = "NEP"),
+                 GPP_P_best.mt %>% 
+                   mutate(trt = "P",
+                          met = "GPP"),
+                 ER_P_best.mt %>% 
+                   mutate(trt = "P",
+                          met = "ER"),
+                 NEP_P_best.mt %>% 
+                   mutate(trt = "P",
+                          met = "NEP"),
+                 GPP_AMB_best.mt %>% 
+                   mutate(trt = "AMB",
+                          met = "GPP"),
+                 ER_AMB_best.mt %>% 
+                   mutate(trt = "AMB",
+                          met = "ER"),
+                 NEP_AMB_best.mt %>% 
+                   mutate(trt = "AMB",
+                          met = "NEP")) %>% 
+  select(trt, met, model, df, AIC, delta)
+```
+
+
+```{r}
+write_csv(AllMods,
+          file.path(here::here("06_AICtables"), "00_allAICtables.csv"))
+```
+
+
+
+```{r}
+GPP_N_best.mt %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+
+```{r}
+ER_N_best.mt %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+
+```{r}
+NEP_N_best.mt %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+
+```{r}
+GPP_P_best.mt %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+
+```{r}
+ER_P_best.mt %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+```{r}
+GPP_AMB_best.mt %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+
+```{r}
+ER_AMB_best.mt %>% 
+  kable() %>% 
+  kable_styling()
+```
+
+
+```{r}
+NEP_AMB_best.mt %>% 
+  kable() %>% 
+  kable_styling()
+```
+
